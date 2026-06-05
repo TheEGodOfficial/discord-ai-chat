@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-discord-darkest text-gray-100;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-discord-darker;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-discord-dark rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-600;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-discord-darker/80 backdrop-blur-md border border-gray-700/50 rounded-xl;
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent;
+  }
+}
