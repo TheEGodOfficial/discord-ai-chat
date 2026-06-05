@@ -99,8 +99,8 @@ export default function VideoGenerator({ models }: VideoGeneratorProps) {
           success = true
           break
         }
-      } catch (err: any) {
-        console.warn(`Video attempt ${attempt}/${maxRetries} failed:`, err)
+      } catch (err) {
+        console.warn("Video attempt " + attempt + "/" + maxRetries + " failed:", err)
         if (attempt < maxRetries) {
           await new Promise(r => setTimeout(r, 10000))
         }
@@ -136,12 +136,11 @@ export default function VideoGenerator({ models }: VideoGeneratorProps) {
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
-    return `${mins}:${secs.toString().padStart(2, "0")}`
+    return mins + ":" + secs.toString().padStart(2, "0")
   }
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      {/* Generator */}
       <div className="glass-panel p-6 rounded-2xl border border-gray-700/30">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 bg-gradient-to-br from-neon-blue to-neon-purple rounded-xl flex items-center justify-center shadow-lg shadow-neon-blue/20">
@@ -161,7 +160,7 @@ export default function VideoGenerator({ models }: VideoGeneratorProps) {
             <textarea
               value={prompt}
               onChange={e => setPrompt(e.target.value)}
-              placeholder="Describe the video you want to generate..."
+              placeholder="Describe the video you want to create. Be as detailed as possible for the best results."
               rows={3}
               className="w-full bg-discord-darker border border-gray-700/50 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-blue/50 resize-none"
             />
@@ -186,7 +185,6 @@ export default function VideoGenerator({ models }: VideoGeneratorProps) {
                 maxRetries={retryCount > 0 ? 8 : undefined}
               />
 
-              {/* Visualizer */}
               <div className="flex items-center gap-1 justify-center h-16">
                 {visualizerBars.map((height, i) => (
                   <div
@@ -209,7 +207,7 @@ export default function VideoGenerator({ models }: VideoGeneratorProps) {
                   />
                 </div>
                 <p className="text-xs text-gray-400 text-center">
-                  {progress < 20 ? "Initializing temporal synthesis..." : progress < 50 ? "Generating frames..." : progress < 80 ? "Rendering motion..." : "Finalizing video..."}
+                  {progress < 20 ? "Getting everything ready..." : progress < 50 ? "Generating frames..." : progress < 80 ? "Rendering motion..." : "Putting on the finishing touches..."}
                 </p>
               </div>
             </div>
@@ -226,7 +224,6 @@ export default function VideoGenerator({ models }: VideoGeneratorProps) {
         </div>
       </div>
 
-      {/* Selected Video View */}
       {selectedVideo && (
         <div className="glass-panel p-6 rounded-2xl border border-gray-700/30 animate-fade-in">
           <div className="flex items-center justify-between mb-4">
@@ -276,10 +273,9 @@ export default function VideoGenerator({ models }: VideoGeneratorProps) {
         </div>
       )}
 
-      {/* History Grid */}
       {history.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Archive</h3>
+          <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Your Creations</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {history.map(item => (
               <div

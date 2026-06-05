@@ -34,7 +34,7 @@ export default function AITimer({ isActive, estimatedSeconds, retryCount, maxRet
 
   const minutes = Math.floor(elapsed / 60)
   const seconds = elapsed % 60
-  const timeStr = `${minutes}:${seconds.toString().padStart(2, "0")}`
+  const timeStr = minutes + ":" + seconds.toString().padStart(2, "0")
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 bg-discord-darker/80 border border-gray-700/50 rounded-lg">
@@ -42,7 +42,7 @@ export default function AITimer({ isActive, estimatedSeconds, retryCount, maxRet
       <div className="flex-1">
         <div className="flex items-center justify-between mb-1">
           <span className="text-sm text-gray-300">
-            {isOverdue ? "Overclocking..." : "Processing..."}
+            {isOverdue ? "Taking longer than expected..." : "Working on it..."}
           </span>
           <span className="text-sm font-mono text-neon-blue">{timeStr}</span>
         </div>

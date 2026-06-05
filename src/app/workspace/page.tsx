@@ -86,7 +86,7 @@ function WorkspaceContent() {
             </div>
             <h1 className="text-3xl font-bold gradient-text mb-2">E Private AI</h1>
             <p className="text-gray-400 text-sm">
-              Free AI Tools made for whitelisted users. Website made with Kiwi AI.
+              Free AI tools built just for whitelisted users. This site was made with Kiwi AI.
             </p>
           </div>
           <LoginButton />
@@ -100,7 +100,7 @@ function WorkspaceContent() {
       <div className="flex items-center justify-center min-h-screen bg-discord-darkest">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-neon-purple mx-auto mb-4" />
-          <p className="text-gray-400">Verifying Discord role...</p>
+          <p className="text-gray-400">Checking your Discord role...</p>
         </div>
       </div>
     )
@@ -113,7 +113,7 @@ function WorkspaceContent() {
           <Shield className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2>
           <p className="text-gray-400 mb-6">
-            You do not have the required role in the Discord server to access this application.
+            Looks like you do not have the right role in the Discord server to use this app.
           </p>
           <LoginButton />
         </div>

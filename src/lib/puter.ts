@@ -141,7 +141,7 @@ export async function fetchModelsWithRetry(maxRetries = 8, delayMs = 10000): Pro
       lastFetchTime = Date.now()
       return models
     } catch (err) {
-      console.warn(`Puter model fetch attempt ${attempt}/${maxRetries} failed:`, err)
+      console.warn("Puter model fetch attempt " + attempt + "/" + maxRetries + " failed:", err)
       if (attempt < maxRetries) {
         await new Promise(r => setTimeout(r, delayMs))
       }

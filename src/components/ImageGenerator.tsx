@@ -80,8 +80,8 @@ export default function ImageGenerator({ models }: ImageGeneratorProps) {
           success = true
           break
         }
-      } catch (err: any) {
-        console.warn(`Image attempt ${attempt}/${maxRetries} failed:`, err)
+      } catch (err) {
+        console.warn("Image attempt " + attempt + "/" + maxRetries + " failed:", err)
         if (attempt < maxRetries) {
           await new Promise(r => setTimeout(r, 10000))
         }
@@ -117,7 +117,7 @@ export default function ImageGenerator({ models }: ImageGeneratorProps) {
   const handleDownload = (url: string, prompt: string) => {
     const link = document.createElement("a")
     link.href = url
-    link.download = `e-private-ai-${prompt.slice(0, 30).replace(/\s+/g, "-")}.png`
+    link.download = "e-private-ai-" + prompt.slice(0, 30).replace(/\s+/g, "-") + ".png"
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -125,7 +125,6 @@ export default function ImageGenerator({ models }: ImageGeneratorProps) {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      {/* Generator */}
       <div className="glass-panel p-6 rounded-2xl border border-gray-700/30">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 bg-gradient-to-br from-neon-pink to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-neon-pink/20">
@@ -145,7 +144,7 @@ export default function ImageGenerator({ models }: ImageGeneratorProps) {
             <textarea
               value={prompt}
               onChange={e => setPrompt(e.target.value)}
-              placeholder="Describe the image you want to generate..."
+              placeholder="Describe the image you want to create. The more detail you give, the better the result."
               rows={3}
               className="w-full bg-discord-darker border border-gray-700/50 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-pink/50 resize-none"
             />
@@ -176,7 +175,7 @@ export default function ImageGenerator({ models }: ImageGeneratorProps) {
                 />
               </div>
               <p className="text-xs text-gray-400 text-center">
-                {progress < 30 ? "Initializing synthesis..." : progress < 70 ? "Rendering pixels..." : "Finalizing output..."}
+                {progress < 30 ? "Getting everything ready..." : progress < 70 ? "Rendering your image..." : "Putting on the finishing touches..."}
               </p>
             </div>
           )}
@@ -192,7 +191,6 @@ export default function ImageGenerator({ models }: ImageGeneratorProps) {
         </div>
       </div>
 
-      {/* Selected Image View */}
       {selectedImage && (
         <div className="glass-panel p-6 rounded-2xl border border-gray-700/30 animate-fade-in">
           <div className="flex items-center justify-between mb-4">
@@ -245,10 +243,9 @@ export default function ImageGenerator({ models }: ImageGeneratorProps) {
         </div>
       )}
 
-      {/* History Grid */}
       {history.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Archive</h3>
+          <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Your Creations</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {history.map(item => (
               <div

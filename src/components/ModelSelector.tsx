@@ -73,7 +73,7 @@ export default function ModelSelector({ models, selected, onSelect, type, label 
       >
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${getStatusColor(selectedModel?.status)}`} />
-          <span className="truncate">{selectedModel?.name || "Select a model"}</span>
+          <span className="truncate">{selectedModel?.name || "Pick a model"}</span>
         </div>
         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>

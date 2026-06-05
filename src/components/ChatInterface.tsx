@@ -1,7 +1,7 @@
 "use client"
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useSession } from "next-auth/react"
-import { Send, Copy, Trash2, Plus, MessageSquare, X, Edit2, Check, Square, Sparkles } from "lucide-react"
+import { Send, Copy, Trash2, Plus, MessageSquare, X, Edit2, Square, Sparkles } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
@@ -25,7 +25,6 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
   const [activeRoomId, setActiveRoomId] = useState<string>("")
   const [input, setInput] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
-  const [abortController, setAbortController] = useState<AbortController | null>(null)
   const [retryCount, setRetryCount] = useState(0)
   const [editingRoom, setEditingRoom] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
@@ -103,29 +102,19 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
   const handleSend = async () => {
     if (!input.trim() || !activeRoomId || isGenerating) return
 
-    const userMsg: ChatMessage = {
-      id: Math.random().toString(36).substring(2, 15),
-      role: "user",
-      content: input.trim(),
-      timestamp: Date.now(),
-      model: activeRoom?.model,
-    }
-
-    addMessage(activeRoomId, { role: "user", content: input.trim(), model: activeRoom?.model })
-    setRooms(getRooms())
+    const trimmed = input.trim()
     setInput("")
 
+    addMessage(activeRoomId, { role: "user", content: trimmed, model: activeRoom?.model })
+    setRooms(getRooms())
     setIsGenerating(true)
     setRetryCount(0)
-    const controller = new AbortController()
-    setAbortController(controller)
 
     const puter = (window as any).puter
     if (!puter?.ai?.chat) {
-      addMessage(activeRoomId, { role: "assistant", content: "E AI is initializing. Please wait a moment and try again.", model: activeRoom?.model })
+      addMessage(activeRoomId, { role: "assistant", content: "E AI is still getting ready. Give it a second and try again.", model: activeRoom?.model })
       setRooms(getRooms())
       setIsGenerating(false)
-      setAbortController(null)
       return
     }
 
@@ -135,17 +124,15 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
       content: m.content,
     })) || []
 
-    const messages = [
-      ...history,
-      { role: "user", content: input.trim() },
-    ]
+    const messages = [...history, { role: "user", content: trimmed }]
 
     let attempt = 0
     const maxRetries = 8
     let assistantContent = ""
     let success = false
+    let stopped = false
 
-    while (attempt < maxRetries && !controller.signal.aborted) {
+    while (attempt < maxRetries && !stopped) {
       attempt++
       setRetryCount(attempt)
       try {
@@ -156,7 +143,7 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
 
         assistantContent = ""
         for await (const part of response) {
-          if (controller.signal.aborted) break
+          if (stopped) break
           assistantContent += part?.text || ""
           const tempMsg: ChatMessage = {
             id: "temp-" + Date.now(),
@@ -167,35 +154,34 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
           }
           const currentRoom = getRoomById(activeRoomId)
           if (currentRoom) {
-            const msgs = [...currentRoom.messages.filter(m => m.id !== "temp-" + Date.now()), tempMsg]
-            currentRoom.messages = msgs
+            currentRoom.messages = [...currentRoom.messages.filter(m => !m.id.startsWith("temp-")), tempMsg]
             setRooms(getRooms())
           }
         }
 
-        if (!controller.signal.aborted) {
+        if (!stopped) {
           success = true
           break
         }
-      } catch (err: any) {
-        console.warn(`Chat attempt ${attempt}/${maxRetries} failed:`, err)
-        if (attempt < maxRetries && !controller.signal.aborted) {
+      } catch (err) {
+        console.warn("Chat attempt " + attempt + "/" + maxRetries + " failed:", err)
+        if (attempt < maxRetries && !stopped) {
           await new Promise(r => setTimeout(r, 10000))
         }
       }
     }
 
-    if (!controller.signal.aborted) {
+    if (!stopped) {
       if (success && assistantContent) {
-        const room = getRoomById(activeRoomId)
-        if (room) {
-          room.messages = room.messages.filter(m => !m.id.startsWith("temp-"))
+        const room2 = getRoomById(activeRoomId)
+        if (room2) {
+          room2.messages = room2.messages.filter(m => !m.id.startsWith("temp-"))
           addMessage(activeRoomId, { role: "assistant", content: assistantContent, model: activeRoom?.model })
         }
       } else {
         addMessage(activeRoomId, {
           role: "assistant",
-          content: "E AI encountered an issue generating a response. The model may be temporarily unavailable. Please try again or select a different model.",
+          content: "E AI ran into a problem while generating a response. The model might be down right now. Try again in a moment or pick a different model from the dropdown above.",
           model: activeRoom?.model,
         })
       }
@@ -203,17 +189,12 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
     }
 
     setIsGenerating(false)
-    setAbortController(null)
     setRetryCount(0)
   }
 
   const handleStop = () => {
-    if (abortController) {
-      abortController.abort()
-      setAbortController(null)
-      setIsGenerating(false)
-      setRetryCount(0)
-    }
+    setIsGenerating(false)
+    setRetryCount(0)
   }
 
   const handleCopy = (text: string) => {
@@ -239,7 +220,6 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
 
   return (
     <div className="flex h-[calc(100vh-80px)]">
-      {/* Sidebar */}
       <div className={`${sidebarOpen ? "w-64" : "w-0"} transition-all duration-300 bg-discord-darker border-r border-gray-700/30 flex flex-col overflow-hidden`}>
         <div className="p-3 border-b border-gray-700/30">
           <button
@@ -303,9 +283,7 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
         </div>
       </div>
 
-      {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700/30 bg-discord-darker/50">
           <div className="flex items-center gap-3">
             <button
@@ -329,7 +307,6 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
           </div>
         </div>
 
-        {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {activeRoom?.messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-center">
@@ -338,7 +315,7 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
               </div>
               <h3 className="text-xl font-bold gradient-text mb-2">E AI</h3>
               <p className="text-gray-400 max-w-md">
-                Start a conversation with E AI. You can ask questions, get help with coding, brainstorm ideas, or just chat.
+                Start a conversation with E AI. Ask questions, get help with coding, brainstorm ideas, or just chat about whatever is on your mind.
               </p>
             </div>
           )}
@@ -368,8 +345,7 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
                               PreTag="div"
                               {...props}
                             >
-                              {String(children).replace(/
-$/, "")}
+                              {String(children).replace(/\n$/, "")}
                             </SyntaxHighlighter>
                           ) : (
                             <code className="bg-discord-darkest px-1.5 py-0.5 rounded text-sm text-neon-blue" {...props}>
@@ -403,7 +379,6 @@ $/, "")}
           <div ref={bottomRef} />
         </div>
 
-        {/* Input Area */}
         <div className="p-4 border-t border-gray-700/30 bg-discord-darker/50">
           {isGenerating && (
             <div className="mb-3">
