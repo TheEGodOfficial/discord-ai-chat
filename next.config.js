@@ -4,6 +4,9 @@ const nextConfig = {
   images: {
     domains: ['cdn.discordapp.com', 'media.discordapp.net'],
   },
+  // Add this:
+  output: undefined,
+  distDir: '.next',
 }
 
 module.exports = nextConfig
