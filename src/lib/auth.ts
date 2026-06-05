@@ -1,14 +1,9 @@
-import NextAuth from "next-auth"
-import Discord from "next-auth/providers/discord"
+import { NextAuthOptions } from "next-auth"
+import DiscordProvider from "next-auth/providers/discord"
 
-export const {
-  handlers: { GET, POST },
-  auth,
-  signIn,
-  signOut,
-} = NextAuth({
+export const authOptions: NextAuthOptions = {
   providers: [
-    Discord({
+    DiscordProvider({
       clientId: process.env.DISCORD_CLIENT_ID!,
       clientSecret: process.env.DISCORD_CLIENT_SECRET!,
       authorization: {
@@ -40,5 +35,4 @@ export const {
     signIn: "/",
     error: "/",
   },
-  trustHost: true,
-})
+}

@@ -2,7 +2,8 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { SessionProvider } from "@/components/SessionProvider"
-import { auth } from "@/lib/auth"
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "@/lib/auth"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -16,12 +17,7 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  let session = null
-  try {
-    session = await auth()
-  } catch (e) {
-    console.error("Auth error:", e)
-  }
+  const session = await getServerSession(authOptions)
 
   return (
     <html lang="en" className="dark">

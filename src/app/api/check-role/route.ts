@@ -1,13 +1,9 @@
+import { getServerSession } from "next-auth/next"
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { authOptions } from "@/lib/auth"
 
 export async function GET() {
-  let session
-  try {
-    session = await auth()
-  } catch (e) {
-    return NextResponse.json({ hasRole: false, error: "Auth failed" }, { status: 401 })
-  }
+  const session = await getServerSession(authOptions)
 
   if (!session?.accessToken) {
     return NextResponse.json({ hasRole: false, error: "Not authenticated" }, { status: 401 })
