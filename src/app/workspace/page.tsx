@@ -25,7 +25,7 @@ function WorkspaceContent() {
 
   useEffect(() => {
     const tab = searchParams.get("tab") as Tab
-    if (tab && ["chat", "image", "video"].includes(tab)) {
+    if (tab && ["chat", "image", "video", "models"].includes(tab)) {
       setActiveTab(tab)
     }
   }, [searchParams])
@@ -222,7 +222,7 @@ function WorkspaceContent() {
               {activeTab === "chat" && <ChatInterface models={models} />}
               {activeTab === "image" && <ImageGenerator models={models} />}
               {activeTab === "video" && <VideoGenerator models={models} />}
-              {activeTab === "models" && <ModelsTab models={models} onRefresh={() => startHealthChecks(models, 30000)} isChecking={models.some(m => m.status === "checking")} />}
+              {activeTab === "models" && <ModelsTab models={models} onRefresh={(updatedModels) => startHealthChecks(updatedModels, 30000)} isChecking={models.some(m => m.status === "checking")} />}
             </div>
           )}
         </main>

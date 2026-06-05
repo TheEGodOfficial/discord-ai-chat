@@ -5,7 +5,7 @@ import { Cpu, Search, AlertCircle, CheckCircle, XCircle, HelpCircle, RefreshCw }
 
 interface ModelsTabProps {
   models: PuterModel[]
-  onRefresh?: () => void
+  onRefresh?: (models: PuterModel[]) => void
   isChecking?: boolean
 }
 
@@ -64,7 +64,7 @@ export default function ModelsTab({ models, onRefresh, isChecking }: ModelsTabPr
         </div>
         {onRefresh && (
           <button
-            onClick={onRefresh}
+            onClick={() => onRefresh?.(models)}
             disabled={isChecking}
             className="flex items-center gap-2 px-3 py-2 bg-discord-darker border border-gray-700/50 rounded-lg text-sm text-gray-300 hover:text-white hover:border-neon-purple/50 transition-all disabled:opacity-50"
           >
