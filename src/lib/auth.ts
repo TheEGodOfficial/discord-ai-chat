@@ -1,5 +1,5 @@
-import { NextAuthOptions } from "next-auth";
-import DiscordProvider from "next-auth/providers/discord";
+import { NextAuthOptions } from "next-auth"
+import DiscordProvider from "next-auth/providers/discord"
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -16,23 +16,23 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, account, profile }) {
       if (account && profile) {
-        token.accessToken = account.access_token;
-        token.id = profile.id;
+        token.accessToken = account.access_token
+        token.id = (profile as any).id
         token.image = (profile as any).avatar
           ? `https://cdn.discordapp.com/avatars/${(profile as any).id}/${(profile as any).avatar}.png`
-          : null;
+          : undefined
       }
-      return token;
+      return token
     },
     async session({ session, token }) {
-      session.user.id = token.id as string;
-      session.user.image = token.image as string;
-      session.accessToken = token.accessToken as string;
-      return session;
+      session.user.id = token.id as string
+      session.user.image = (token.image as string) || undefined
+      session.accessToken = token.accessToken as string
+      return session
     },
   },
   pages: {
     signIn: "/",
     error: "/",
   },
-};
+}
