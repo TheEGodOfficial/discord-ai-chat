@@ -146,7 +146,7 @@ export default function ImageGenerator({ models }: ImageGeneratorProps) {
               onChange={e => setPrompt(e.target.value)}
               placeholder="Describe the image you want to create. The more detail you give, the better the result."
               rows={3}
-              className="w-full bg-discord-darker border border-gray-700/50 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-pink/50 resize-none"
+              className="w-full bg-discord-darkest border border-gray-700/50 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-pink/50 resize-none"
             />
           </div>
 
