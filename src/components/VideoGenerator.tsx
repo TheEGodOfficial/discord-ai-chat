@@ -74,7 +74,7 @@ export default function VideoGenerator({ models }: VideoGeneratorProps) {
     setRetryCount(0)
 
     const puter = (window as any).puter
-    if (!puter?.ai?.txt2img) {
+    if (!puter?.ai?.txt2vid) {
       setIsGenerating(false)
       return
     }
@@ -89,7 +89,7 @@ export default function VideoGenerator({ models }: VideoGeneratorProps) {
       attempt++
       setRetryCount(attempt)
       try {
-        const result = await puter.ai.txt2img(prompt.trim(), {
+        const result = await puter.ai.txt2vid(prompt.trim(), {
           model: selectedModel,
         })
 

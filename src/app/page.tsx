@@ -3,7 +3,7 @@
 import { useSession } from "next-auth/react"
 import { useEffect, useState } from "react"
 import LoginButton from "@/components/LoginButton"
-import { Loader2, Shield, ImageIcon, Video, MessageSquare, Lock, Sparkles, ArrowRight } from "lucide-react"
+import { Loader2, Shield, ImageIcon, Video, MessageSquare, Lock, Sparkles, ArrowRight, Cpu } from "lucide-react"
 import Link from "next/link"
 
 type Tab = "chat" | "image" | "video"
@@ -165,6 +165,21 @@ export default function Home() {
                 </p>
                 <div className="flex items-center gap-1 mt-4 text-neon-purple text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity">
                   Try it out <ArrowRight className="w-4 h-4" />
+                </div>
+              </div>
+            </Link>
+
+            <Link href="/workspace?tab=models" className="group">
+              <div className="glass-panel p-6 rounded-2xl border border-gray-700/30 hover:border-neon-purple/50 transition-all hover:shadow-lg hover:shadow-neon-purple/10 h-full">
+                <div className="w-12 h-12 bg-gradient-to-br from-neon-purple to-blue-600 rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-neon-purple/20 group-hover:scale-110 transition-transform">
+                  <Cpu className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">All Models</h3>
+                <p className="text-sm text-gray-400">
+                  Browse every AI model available from Puter.js. See their specs, aliases, cost, and real-time status all in one place.
+                </p>
+                <div className="flex items-center gap-1 mt-4 text-neon-purple text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                  View all <ArrowRight className="w-4 h-4" />
                 </div>
               </div>
             </Link>

@@ -7,10 +7,11 @@ import LoginButton from "@/components/LoginButton"
 import ChatInterface from "@/components/ChatInterface"
 import ImageGenerator from "@/components/ImageGenerator"
 import VideoGenerator from "@/components/VideoGenerator"
-import { Loader2, Shield, Sparkles, ImageIcon, Video, MessageSquare } from "lucide-react"
+import ModelsTab from "@/components/ModelsTab"
+import { Loader2, Shield, Sparkles, ImageIcon, Video, MessageSquare, Cpu } from "lucide-react"
 import { PuterModel, fetchModelsWithRetry, startHealthChecks, stopHealthChecks, subscribeHealth } from "@/lib/puter"
 
-type Tab = "chat" | "image" | "video"
+type Tab = "chat" | "image" | "video" | "models"
 
 function WorkspaceContent() {
   const { data: session, status } = useSession()
@@ -176,6 +177,19 @@ function WorkspaceContent() {
                     Video
                   </span>
                 </button>
+                <button
+                  onClick={() => setActiveTab("models")}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    activeTab === "models"
+                      ? "bg-neon-purple/20 text-white border border-neon-purple/30 shadow-lg shadow-neon-purple/10"
+                      : "text-gray-400 hover:text-white hover:bg-discord-darkest"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <Cpu className="w-4 h-4" />
+                    Models
+                  </span>
+                </button>
               </nav>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-discord-darker rounded-lg">
@@ -199,7 +213,8 @@ function WorkspaceContent() {
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
                 <Loader2 className="w-8 h-8 animate-spin text-neon-purple mx-auto mb-4" />
-                <p className="text-gray-400">Loading AI models...</p>
+                <p className="text-gray-400">Loading AI models from Puter.js...</p>
+                <p className="text-xs text-gray-500 mt-2">This may take a few seconds</p>
               </div>
             </div>
           ) : (
@@ -207,6 +222,7 @@ function WorkspaceContent() {
               {activeTab === "chat" && <ChatInterface models={models} />}
               {activeTab === "image" && <ImageGenerator models={models} />}
               {activeTab === "video" && <VideoGenerator models={models} />}
+              {activeTab === "models" && <ModelsTab models={models} />}
             </div>
           )}
         </main>

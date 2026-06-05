@@ -129,7 +129,7 @@ export default function ModelSelector({ models, selected, onSelect, type, label 
             {filtered.length === 0 && (
               <div className="px-3 py-4 text-sm text-gray-500 text-center">
                 <AlertCircle className="w-4 h-4 mx-auto mb-1" />
-                No models found
+                {models.length === 0 ? "Loading models from Puter.js..." : "No models match your search"}
               </div>
             )}
           </div>
