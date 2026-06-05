@@ -1,247 +1,197 @@
-"use client";
+"use client"
 
-import { useSession } from "next-auth/react";
-import { useEffect, useState, useCallback, useRef } from "react";
-import LoginButton from "@/components/LoginButton";
-import ChatInterface from "@/components/ChatInterface";
-import ImageGenerator from "@/components/ImageGenerator";
-import VideoGenerator from "@/components/VideoGenerator";
-import { Loader2, Shield, Sparkles, Image, Video, Zap, Orbit } from "lucide-react";
+import { useSession } from "next-auth/react"
+import { useEffect, useState } from "react"
+import LoginButton from "@/components/LoginButton"
+import { Loader2, Shield, ImageIcon, Video, MessageSquare, Lock, Sparkles, ArrowRight } from "lucide-react"
+import Link from "next/link"
 
-type Tab = "chat" | "image" | "video";
-
-const TAB_STORAGE_KEY = "ai-active-tab";
+type Tab = "chat" | "image" | "video"
 
 export default function Home() {
-  const { data: session, status } = useSession();
-  const [hasRole, setHasRole] = useState<boolean | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>(() => {
-    if (typeof window !== "undefined") {
-      return (localStorage.getItem(TAB_STORAGE_KEY) as Tab) || "chat";
-    }
-    return "chat";
-  });
-  const [loading, setLoading] = useState(false);
-  const [roleChecked, setRoleChecked] = useState(false);
-  const roleCheckInProgress = useRef(false);
+  const { data: session, status } = useSession()
+  const [hasRole, setHasRole] = useState<boolean | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [roleChecked, setRoleChecked] = useState(false)
 
   useEffect(() => {
-    localStorage.setItem(TAB_STORAGE_KEY, activeTab);
-  }, [activeTab]);
+    if (session?.user?.id && !roleChecked) {
+      checkRole()
+    }
+  }, [session, roleChecked])
 
-  const checkRole = useCallback(async () => {
-    if (roleCheckInProgress.current || roleChecked) return;
-    roleCheckInProgress.current = true;
-    setLoading(true);
-
+  const checkRole = async () => {
+    setLoading(true)
     try {
-      const res = await fetch("/api/check-role");
-      const data = await res.json();
-      setHasRole(data.hasRole);
+      const res = await fetch("/api/check-role")
+      const data = await res.json()
+      setHasRole(data.hasRole)
     } catch (error) {
-      console.error("Error checking role:", error);
-      setHasRole(false);
+      console.error("Error checking role:", error)
+      setHasRole(false)
     } finally {
-      setLoading(false);
-      setRoleChecked(true);
-      roleCheckInProgress.current = false;
+      setLoading(false)
+      setRoleChecked(true)
     }
-  }, [roleChecked]);
-
-  useEffect(() => {
-    if (session?.user?.id && !roleChecked && status === "authenticated") {
-      checkRole();
-    }
-  }, [session, status, roleChecked, checkRole]);
-
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible" && status === "unauthenticated" && hasRole !== null) {
-        setHasRole(null);
-        setRoleChecked(false);
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [status, hasRole]);
+  }
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center grid-bg">
-        <div className="relative">
-          <div className="w-16 h-16 rounded-full border-2 border-neon-purple/30 border-t-neon-purple animate-spin" />
-          <div className="absolute inset-0 w-16 h-16 rounded-full border-2 border-neon-blue/20 border-t-neon-blue animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }} />
-        </div>
+      <div className="flex items-center justify-center min-h-screen bg-discord-darkest">
+        <Loader2 className="w-8 h-8 animate-spin text-neon-purple" />
       </div>
-    );
+    )
   }
 
   if (!session) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 grid-bg relative overflow-hidden">
-        {/* Floating particles */}
+      <div className="min-h-screen bg-discord-darkest flex flex-col items-center justify-center px-4 relative overflow-hidden">
+        {/* Background particles */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-1/4 left-1/4 w-2 h-2 bg-neon-purple/30 rounded-full animate-float" style={{ animationDelay: '0s' }} />
-          <div className="absolute top-1/3 right-1/3 w-3 h-3 bg-neon-blue/20 rounded-full animate-float" style={{ animationDelay: '1s' }} />
-          <div className="absolute bottom-1/4 left-1/3 w-2 h-2 bg-neon-pink/20 rounded-full animate-float" style={{ animationDelay: '2s' }} />
-          <div className="absolute top-2/3 right-1/4 w-1 h-1 bg-neon-purple/40 rounded-full animate-float" style={{ animationDelay: '3s' }} />
+          {Array.from({ length: 20 }).map((_, i) => (
+            <div
+              key={i}
+              className="absolute w-1 h-1 bg-neon-purple/30 rounded-full animate-float"
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 6}s`,
+                animationDuration: `${4 + Math.random() * 4}s`,
+              }}
+            />
+          ))}
         </div>
 
-        <div className="glass-panel p-10 max-w-md w-full text-center animate-fade-in relative z-10">
-          <div className="mb-8">
-            <div className="w-24 h-24 mx-auto mb-6 relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-neon-purple to-neon-blue rounded-2xl rotate-3 opacity-50 blur-xl animate-pulse-glow" />
-              <div className="relative w-24 h-24 bg-gradient-to-br from-neon-purple via-neon-blue to-neon-pink rounded-2xl flex items-center justify-center shadow-neon">
-                <Orbit className="w-12 h-12 text-white" />
-              </div>
+        <div className="glass-panel p-8 max-w-md w-full text-center animate-fade-in relative z-10 border border-gray-700/30">
+          <div className="mb-6">
+            <div className="w-20 h-20 bg-gradient-to-br from-neon-purple to-neon-blue rounded-2xl mx-auto flex items-center justify-center mb-4 shadow-lg shadow-neon-purple/20 animate-pulse-glow">
+              <Sparkles className="w-10 h-10 text-white" />
             </div>
-            <h1 className="text-4xl font-bold gradient-text mb-3">NEXUS AI</h1>
-            <p className="text-gray-400 text-sm tracking-wide">Discord-verified AI workspace</p>
-          </div>
-
-          <div className="space-y-4">
-            <LoginButton />
-            <p className="text-xs text-gray-500">
-              Requires verified Discord role for access
+            <h1 className="text-3xl font-bold gradient-text mb-2">E Private AI</h1>
+            <p className="text-gray-400 text-sm">
+              Free AI Tools made for whitelisted users. Website made with Kiwi AI.
             </p>
           </div>
-
-          <div className="mt-8 flex justify-center gap-6 text-xs text-gray-600">
-            <span className="flex items-center gap-1">
-              <Zap className="w-3 h-3 text-neon-purple" />
-              30+ Models
-            </span>
-            <span className="flex items-center gap-1">
-              <Image className="w-3 h-3 text-neon-blue" />
-              Text-to-Image
-            </span>
-            <span className="flex items-center gap-1">
-              <Video className="w-3 h-3 text-neon-pink" />
-              Text-to-Video
-            </span>
-          </div>
+          <LoginButton />
+          <p className="mt-4 text-sm text-gray-500">
+            You need a specific role in our Discord server to access this app.
+          </p>
         </div>
       </div>
-    );
+    )
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center grid-bg">
+      <div className="flex items-center justify-center min-h-screen bg-discord-darkest">
         <div className="text-center">
-          <div className="relative w-12 h-12 mx-auto mb-4">
-            <div className="absolute inset-0 rounded-full border-2 border-neon-purple/30 border-t-neon-purple animate-spin" />
-            <div className="absolute inset-2 rounded-full border-2 border-neon-blue/20 border-t-neon-blue animate-spin" style={{ animationDirection: 'reverse' }} />
-          </div>
-          <p className="text-gray-400 text-sm">Verifying neural link...</p>
+          <Loader2 className="w-8 h-8 animate-spin text-neon-purple mx-auto mb-4" />
+          <p className="text-gray-400">Verifying Discord role...</p>
         </div>
       </div>
-    );
+    )
   }
 
   if (hasRole === false) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 grid-bg">
-        <div className="glass-panel p-10 max-w-md w-full text-center animate-fade-in">
-          <div className="w-20 h-20 mx-auto mb-6 relative">
-            <div className="absolute inset-0 bg-red-500/20 rounded-full blur-xl" />
-            <Shield className="relative w-20 h-20 text-red-400" />
-          </div>
+      <div className="min-h-screen bg-discord-darkest flex flex-col items-center justify-center px-4">
+        <div className="glass-panel p-8 max-w-md w-full text-center animate-fade-in border border-gray-700/30">
+          <Shield className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2>
-          <p className="text-gray-400 mb-8">
-            Neural link rejected. Your Discord account lacks the required clearance level.
+          <p className="text-gray-400 mb-6">
+            You do not have the required role in the Discord server to access this application.
           </p>
           <LoginButton />
         </div>
       </div>
-    );
+    )
   }
 
   if (hasRole === true) {
     return (
-      <div className="min-h-screen flex flex-col bg-surface-black">
-        {/* Header */}
-        <header className="glass-panel border-b border-[rgba(176,38,255,0.15)] px-6 py-3 sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="relative w-10 h-10">
-                <div className="absolute inset-0 bg-gradient-to-br from-neon-purple to-neon-blue rounded-xl opacity-50 blur-lg animate-pulse-glow" />
-                <div className="relative w-10 h-10 bg-gradient-to-br from-neon-purple to-neon-blue rounded-xl flex items-center justify-center shadow-neon">
-                  <Orbit className="w-5 h-5 text-white" />
-                </div>
-              </div>
-              <div>
-                <h1 className="font-bold text-lg tracking-wide">NEXUS AI</h1>
-                <p className="text-xs text-gray-500">Powered by Puter.js</p>
-              </div>
+      <div className="min-h-screen bg-discord-darkest">
+        {/* Hero Section */}
+        <div className="relative overflow-hidden border-b border-gray-700/30">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-neon-purple/10 via-transparent to-transparent" />
+          <div className="max-w-6xl mx-auto px-6 py-16 text-center relative z-10">
+            <div className="w-16 h-16 bg-gradient-to-br from-neon-purple to-neon-blue rounded-2xl mx-auto flex items-center justify-center mb-6 shadow-lg shadow-neon-purple/20">
+              <Sparkles className="w-8 h-8 text-white" />
             </div>
+            <h1 className="text-4xl md:text-5xl font-bold gradient-text mb-4">E Private AI</h1>
+            <p className="text-lg text-gray-400 max-w-2xl mx-auto">
+              Free AI Tools made for whitelisted users. Website made with Kiwi AI.
+            </p>
+          </div>
+        </div>
 
-            <div className="flex items-center gap-4">
-              <nav className="flex gap-1 bg-surface-dark rounded-xl p-1 border border-[rgba(176,38,255,0.1)]">
-                <button
-                  onClick={() => setActiveTab("chat")}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 flex items-center gap-2 ${
-                    activeTab === "chat"
-                      ? "tab-active"
-                      : "text-gray-400 hover:text-white hover:bg-[rgba(176,38,255,0.1)]"
-                  }`}
-                >
-                  <Sparkles className="w-4 h-4" />
-                  Chat
-                </button>
-                <button
-                  onClick={() => setActiveTab("image")}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 flex items-center gap-2 ${
-                    activeTab === "image"
-                      ? "tab-active"
-                      : "text-gray-400 hover:text-white hover:bg-[rgba(0,243,255,0.1)]"
-                  }`}
-                >
-                  <Image className="w-4 h-4" />
-                  Image
-                </button>
-                <button
-                  onClick={() => setActiveTab("video")}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 flex items-center gap-2 ${
-                    activeTab === "video"
-                      ? "tab-active"
-                      : "text-gray-400 hover:text-white hover:bg-[rgba(255,0,170,0.1)]"
-                  }`}
-                >
-                  <Video className="w-4 h-4" />
-                  Video
-                </button>
-              </nav>
-
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-dark rounded-xl border border-[rgba(176,38,255,0.15)]">
-                  {session.user?.image && (
-                    <img
-                      src={session.user.image}
-                      alt="Avatar"
-                      className="w-6 h-6 rounded-full ring-2 ring-neon-purple/30"
-                    />
-                  )}
-                  <span className="text-sm font-medium">{session.user?.name}</span>
-                  <div className="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.5)]" />
+        {/* Feature Panels */}
+        <div className="max-w-6xl mx-auto px-6 py-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Image Gen */}
+            <Link href="/workspace?tab=image" className="group">
+              <div className="glass-panel p-6 rounded-2xl border border-gray-700/30 hover:border-neon-pink/50 transition-all hover:shadow-lg hover:shadow-neon-pink/10 h-full">
+                <div className="w-12 h-12 bg-gradient-to-br from-neon-pink to-purple-600 rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-neon-pink/20 group-hover:scale-110 transition-transform">
+                  <ImageIcon className="w-6 h-6 text-white" />
                 </div>
-                <LoginButton />
+                <h3 className="text-lg font-bold text-white mb-2">Image Gen</h3>
+                <p className="text-sm text-gray-400">
+                  There is a built-in AI Image Generator with multiple AI models of choice!
+                </p>
+                <div className="flex items-center gap-1 mt-4 text-neon-pink text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                  Try it <ArrowRight className="w-4 h-4" />
+                </div>
+              </div>
+            </Link>
+
+            {/* Video Gen */}
+            <Link href="/workspace?tab=video" className="group">
+              <div className="glass-panel p-6 rounded-2xl border border-gray-700/30 hover:border-neon-blue/50 transition-all hover:shadow-lg hover:shadow-neon-blue/10 h-full">
+                <div className="w-12 h-12 bg-gradient-to-br from-neon-blue to-neon-purple rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-neon-blue/20 group-hover:scale-110 transition-transform">
+                  <Video className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">Video Gen</h3>
+                <p className="text-sm text-gray-400">
+                  There is a built-in AI Video Generator with multiple AI models you can choose from!
+                </p>
+                <div className="flex items-center gap-1 mt-4 text-neon-blue text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                  Try it <ArrowRight className="w-4 h-4" />
+                </div>
+              </div>
+            </Link>
+
+            {/* Chat Bot */}
+            <Link href="/workspace?tab=chat" className="group">
+              <div className="glass-panel p-6 rounded-2xl border border-gray-700/30 hover:border-neon-purple/50 transition-all hover:shadow-lg hover:shadow-neon-purple/10 h-full">
+                <div className="w-12 h-12 bg-gradient-to-br from-neon-purple to-blue-600 rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-neon-purple/20 group-hover:scale-110 transition-transform">
+                  <MessageSquare className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">Chat Bot</h3>
+                <p className="text-sm text-gray-400">
+                  You can chat with an AI and also vibe-code with it too!
+                </p>
+                <div className="flex items-center gap-1 mt-4 text-neon-purple text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                  Try it <ArrowRight className="w-4 h-4" />
+                </div>
+              </div>
+            </Link>
+
+            {/* All Private */}
+            <div className="group">
+              <div className="glass-panel p-6 rounded-2xl border border-gray-700/30 hover:border-green-500/50 transition-all hover:shadow-lg hover:shadow-green-500/10 h-full">
+                <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-green-500/20 group-hover:scale-110 transition-transform">
+                  <Lock className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-2">All Private</h3>
+                <p className="text-sm text-gray-400">
+                  All made for whitelisted people only so you can experience exclusive free AI tools!
+                </p>
               </div>
             </div>
           </div>
-        </header>
-
-        {/* Main Content */}
-        <main className="flex-1 max-w-7xl mx-auto w-full p-6">
-          <div className="animate-slide-up">
-            {activeTab === "chat" && <ChatInterface />}
-            {activeTab === "image" && <ImageGenerator />}
-            {activeTab === "video" && <VideoGenerator />}
-          </div>
-        </main>
+        </div>
       </div>
-    );
+    )
   }
 
-  return null;
+  return null
 }

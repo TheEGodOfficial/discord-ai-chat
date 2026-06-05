@@ -1,354 +1,451 @@
-"use client";
+"use client"
+import { useState, useRef, useEffect, useCallback } from "react"
+import { useSession } from "next-auth/react"
+import { Send, Copy, Trash2, Plus, MessageSquare, X, Edit2, Check, Square, Sparkles } from "lucide-react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
+import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism"
+import ModelSelector from "./ModelSelector"
+import AITimer from "./AITimer"
+import { PuterModel } from "@/lib/puter"
+import {
+  ChatRoom, ChatMessage,
+  getRooms, createRoom, deleteRoom, renameRoom,
+  addMessage, clearRoomMessages, updateRoomModel, getRoomById,
+} from "@/lib/chat-rooms"
 
-import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Bot, User, Loader2, Sparkles, Trash2, Copy, Check, Zap } from "lucide-react";
-import ModelSelector from "./ModelSelector";
-import ModelLoader, { ModelInfo } from "./ModelLoader";
-import AITimer from "./AITimer";
+interface ChatInterfaceProps {
+  models: PuterModel[]
+}
 
-type Message = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: number;
-  isStreaming?: boolean;
-};
+export default function ChatInterface({ models }: ChatInterfaceProps) {
+  const { data: session } = useSession()
+  const [rooms, setRooms] = useState<ChatRoom[]>([])
+  const [activeRoomId, setActiveRoomId] = useState<string>("")
+  const [input, setInput] = useState("")
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [abortController, setAbortController] = useState<AbortController | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
+  const [editingRoom, setEditingRoom] = useState<string | null>(null)
+  const [editName, setEditName] = useState("")
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-const STORAGE_KEY = "ai-chat-messages";
-const MODEL_KEY = "ai-chat-model";
+  const activeRoom = rooms.find(r => r.id === activeRoomId)
 
-export default function ChatInterface() {
-  const [messages, setMessages] = useState<Message[]>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          return parsed.map((m: Message) => ({ ...m, timestamp: new Date(m.timestamp).getTime() }));
-        } catch { return []; }
-      }
+  useEffect(() => {
+    const loaded = getRooms()
+    setRooms(loaded)
+    if (loaded.length === 0) {
+      const newRoom = createRoom("New Chat", getDefaultModel())
+      setRooms([newRoom])
+      setActiveRoomId(newRoom.id)
+    } else {
+      setActiveRoomId(loaded[0].id)
     }
-    return [];
-  });
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem(MODEL_KEY) || "gpt-4o";
+  }, [])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [activeRoom?.messages])
+
+  useEffect(() => {
+    const ta = textareaRef.current
+    if (ta) {
+      ta.style.height = "auto"
+      ta.style.height = ta.scrollHeight + "px"
     }
-    return "gpt-4o";
-  });
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
-  const [models, setModels] = useState<ModelInfo[]>([]);
-  const [modelsLoaded, setModelsLoaded] = useState(false);
+  }, [input])
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const isGeneratingRef = useRef(false);
+  function getDefaultModel(): string {
+    const chatModels = models.filter(m => m.type === "chat")
+    if (chatModels.length === 0) return "gpt-5-nano"
+    const online = chatModels.find(m => m.status === "online")
+    return online?.id || chatModels[0].id
+  }
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
-  }, [messages]);
+  const handleNewRoom = () => {
+    const newRoom = createRoom(`Chat ${rooms.length + 1}`, getDefaultModel())
+    setRooms(getRooms())
+    setActiveRoomId(newRoom.id)
+  }
 
-  useEffect(() => {
-    localStorage.setItem(MODEL_KEY, selectedModel);
-  }, [selectedModel]);
-
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        scrollToBottom();
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, []);
-
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, []);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, scrollToBottom]);
-
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = textareaRef.current.scrollHeight + "px";
+  const handleDeleteRoom = (roomId: string) => {
+    const updated = deleteRoom(roomId)
+    setRooms(updated)
+    if (activeRoomId === roomId && updated.length > 0) {
+      setActiveRoomId(updated[0].id)
     }
-  }, [input]);
+  }
 
-  const handleModelsLoaded = (loadedModels: ModelInfo[]) => {
-    setModels(loadedModels);
-    setModelsLoaded(true);
-
-    const modelExists = loadedModels.some(m => m.id === selectedModel);
-    if (!modelExists && loadedModels.length > 0) {
-      setSelectedModel(loadedModels[0].id);
+  const handleRenameRoom = (roomId: string) => {
+    if (editName.trim()) {
+      const updated = renameRoom(roomId, editName.trim())
+      setRooms(updated)
     }
-  };
+    setEditingRoom(null)
+    setEditName("")
+  }
 
-  const handleSubmit = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!input.trim() || isLoading || isGeneratingRef.current) return;
+  const handleClearRoom = (roomId: string) => {
+    clearRoomMessages(roomId)
+    setRooms(getRooms())
+  }
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
+  const handleModelChange = (modelId: string) => {
+    if (!activeRoomId) return
+    updateRoomModel(activeRoomId, modelId)
+    setRooms(getRooms())
+  }
+
+  const handleSend = async () => {
+    if (!input.trim() || !activeRoomId || isGenerating) return
+
+    const userMsg: ChatMessage = {
+      id: Math.random().toString(36).substring(2, 15),
       role: "user",
       content: input.trim(),
       timestamp: Date.now(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setIsLoading(true);
-    isGeneratingRef.current = true;
-
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
+      model: activeRoom?.model,
     }
 
-    const assistantId = (Date.now() + 1).toString();
-    const assistantMessage: Message = {
-      id: assistantId,
-      role: "assistant",
-      content: "",
-      timestamp: Date.now(),
-      isStreaming: true,
-    };
+    addMessage(activeRoomId, { role: "user", content: input.trim(), model: activeRoom?.model })
+    setRooms(getRooms())
+    setInput("")
 
-    setMessages((prev) => [...prev, assistantMessage]);
+    setIsGenerating(true)
+    setRetryCount(0)
+    const controller = new AbortController()
+    setAbortController(controller)
 
-    const controller = new AbortController();
-    setAbortController(controller);
+    const puter = (window as any).puter
+    if (!puter?.ai?.chat) {
+      addMessage(activeRoomId, { role: "assistant", content: "E AI is initializing. Please wait a moment and try again.", model: activeRoom?.model })
+      setRooms(getRooms())
+      setIsGenerating(false)
+      setAbortController(null)
+      return
+    }
 
-    try {
-      const puter = (window as any).puter;
-      if (!puter) {
-        throw new Error("Puter.js not loaded. Please refresh the page.");
-      }
+    const room = getRoomById(activeRoomId)
+    const history = room?.messages.slice(0, -1).map(m => ({
+      role: m.role,
+      content: m.content,
+    })) || []
 
-      const conversationHistory = messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
+    const messages = [
+      ...history,
+      { role: "user", content: input.trim() },
+    ]
 
-      conversationHistory.push({ role: "user", content: userMessage.content });
+    let attempt = 0
+    const maxRetries = 8
+    let assistantContent = ""
+    let success = false
 
-      const response = await puter.ai.chat(conversationHistory, {
-        model: selectedModel,
-        stream: true,
-      });
+    while (attempt < maxRetries && !controller.signal.aborted) {
+      attempt++
+      setRetryCount(attempt)
+      try {
+        const response = await puter.ai.chat(messages, {
+          model: activeRoom?.model || getDefaultModel(),
+          stream: true,
+        })
 
-      let fullContent = "";
-      for await (const part of response) {
-        if (controller.signal.aborted) break;
-        if (part?.text) {
-          fullContent += part.text;
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId
-                ? { ...m, content: fullContent, isStreaming: true }
-                : m
-            )
-          );
+        assistantContent = ""
+        for await (const part of response) {
+          if (controller.signal.aborted) break
+          assistantContent += part?.text || ""
+          const tempMsg: ChatMessage = {
+            id: "temp-" + Date.now(),
+            role: "assistant",
+            content: assistantContent,
+            timestamp: Date.now(),
+            model: activeRoom?.model,
+          }
+          const currentRoom = getRoomById(activeRoomId)
+          if (currentRoom) {
+            const msgs = [...currentRoom.messages.filter(m => m.id !== "temp-" + Date.now()), tempMsg]
+            currentRoom.messages = msgs
+            setRooms(getRooms())
+          }
+        }
+
+        if (!controller.signal.aborted) {
+          success = true
+          break
+        }
+      } catch (err: any) {
+        console.warn(`Chat attempt ${attempt}/${maxRetries} failed:`, err)
+        if (attempt < maxRetries && !controller.signal.aborted) {
+          await new Promise(r => setTimeout(r, 10000))
         }
       }
-
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantId ? { ...m, content: fullContent, isStreaming: false } : m
-        )
-      );
-    } catch (error: any) {
-      if (error.name === "AbortError") {
-        return;
-      }
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantId
-            ? {
-                ...m,
-                content: `Error: ${error.message || "Failed to get response"}`,
-                isStreaming: false,
-              }
-            : m
-        )
-      );
-    } finally {
-      setIsLoading(false);
-      isGeneratingRef.current = false;
-      setAbortController(null);
     }
-  };
+
+    if (!controller.signal.aborted) {
+      if (success && assistantContent) {
+        const room = getRoomById(activeRoomId)
+        if (room) {
+          room.messages = room.messages.filter(m => !m.id.startsWith("temp-"))
+          addMessage(activeRoomId, { role: "assistant", content: assistantContent, model: activeRoom?.model })
+        }
+      } else {
+        addMessage(activeRoomId, {
+          role: "assistant",
+          content: "E AI encountered an issue generating a response. The model may be temporarily unavailable. Please try again or select a different model.",
+          model: activeRoom?.model,
+        })
+      }
+      setRooms(getRooms())
+    }
+
+    setIsGenerating(false)
+    setAbortController(null)
+    setRetryCount(0)
+  }
+
+  const handleStop = () => {
+    if (abortController) {
+      abortController.abort()
+      setAbortController(null)
+      setIsGenerating(false)
+      setRetryCount(0)
+    }
+  }
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text)
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
+      e.preventDefault()
+      handleSend()
     }
-  };
+  }
 
-  const clearChat = () => {
-    if (abortController) {
-      abortController.abort();
-    }
-    setMessages([]);
-    localStorage.removeItem(STORAGE_KEY);
-  };
-
-  const copyMessage = (id: string, content: string) => {
-    navigator.clipboard.writeText(content);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
+  const estimateSeconds = () => {
+    const model = activeRoom?.model || ""
+    if (model.includes("opus") || model.includes("4-7")) return 15
+    if (model.includes("sonnet") || model.includes("4-5")) return 8
+    if (model.includes("flash") || model.includes("nano")) return 3
+    if (model.includes("deepseek")) return 10
+    if (model.includes("grok")) return 6
+    return 5
+  }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)] max-w-5xl mx-auto">
-      <ModelLoader onModelsLoaded={handleModelsLoaded} type="chat" />
-
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="relative w-10 h-10">
-            <div className="absolute inset-0 bg-neon-blue/30 rounded-xl blur-lg animate-pulse-glow" />
-            <div className="relative w-10 h-10 bg-gradient-to-br from-neon-purple to-neon-blue rounded-xl flex items-center justify-center shadow-neon">
-              <Bot className="w-5 h-5 text-white" />
-            </div>
-          </div>
-          <div>
-            <h2 className="font-semibold text-white tracking-wide">Neural Chat</h2>
-            <p className="text-xs text-gray-500">{messages.length} transmissions</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <ModelSelector
-            models={models.length > 0 ? models : [{ id: "gpt-4o", name: "GPT-4o", provider: "OpenAI" }]}
-            selected={selectedModel}
-            onSelect={setSelectedModel}
-            label="Model"
-            dropdownDirection="down"
-          />
-          {messages.length > 0 && (
-            <button
-              onClick={clearChat}
-              className="p-2.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all duration-300 border border-transparent hover:border-red-500/20"
-              title="Clear transmissions"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Timer */}
-      <div className="mb-3">
-        <AITimer isGenerating={isLoading} modelType="chat" modelId={selectedModel} />
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2">
-        {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500">
-            <div className="relative mb-6">
-              <div className="absolute inset-0 bg-neon-purple/20 rounded-full blur-2xl animate-pulse-glow" />
-              <Sparkles className="relative w-16 h-16 text-neon-purple/50" />
-            </div>
-            <p className="text-xl font-medium gradient-text mb-2">Initialize Neural Link</p>
-            <p className="text-sm text-gray-600">Select a model and transmit your first message</p>
-            {!modelsLoaded && (
-              <p className="text-xs text-gray-700 mt-3 flex items-center gap-2">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Synchronizing model database...
-              </p>
-            )}
-          </div>
-        )}
-
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
-          >
-            <div
-              className={`max-w-[80%] rounded-2xl px-5 py-4 ${
-                message.role === "user"
-                  ? "message-user rounded-br-sm"
-                  : "message-ai rounded-bl-sm"
-              }`}
-            >
-              <div className="flex items-center gap-2 mb-2">
-                {message.role === "assistant" ? (
-                  <div className="w-6 h-6 rounded-full bg-neon-blue/20 flex items-center justify-center">
-                    <Bot className="w-3.5 h-3.5 text-neon-blue" />
-                  </div>
-                ) : (
-                  <div className="w-6 h-6 rounded-full bg-neon-purple/20 flex items-center justify-center">
-                    <User className="w-3.5 h-3.5 text-neon-purple" />
-                  </div>
-                )}
-                <span className="text-xs font-medium opacity-70 uppercase tracking-wider">
-                  {message.role === "user" ? "Operator" : "Neural Net"}
-                </span>
-                <span className="text-xs opacity-40">
-                  {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </span>
-              </div>
-              <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                {message.content}
-                {message.isStreaming && (
-                  <span className="inline-block w-1.5 h-4 bg-neon-blue ml-1 animate-pulse shadow-[0_0_8px_rgba(0,243,255,0.8)]" />
-                )}
-              </div>
-              {message.role === "assistant" && !message.isStreaming && (
-                <div className="flex items-center gap-1 mt-3 pt-2 border-t border-[rgba(0,243,255,0.1)]">
-                  <button
-                    onClick={() => copyMessage(message.id, message.content)}
-                    className="p-1.5 text-gray-500 hover:text-neon-blue hover:bg-neon-blue/10 rounded-lg transition-all duration-300"
-                    title="Copy transmission"
-                  >
-                    {copiedId === message.id ? (
-                      <Check className="w-3.5 h-3.5 text-green-400" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input */}
-      <form onSubmit={handleSubmit} className="relative">
-        <div className="glass-panel p-2 flex items-end gap-2">
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Transmit message... (Shift+Enter for newline)"
-            className="flex-1 bg-transparent border-none outline-none text-white placeholder-gray-600 resize-none max-h-32 py-3 px-4 text-sm"
-            rows={1}
-            disabled={isLoading}
-          />
+    <div className="flex h-[calc(100vh-80px)]">
+      {/* Sidebar */}
+      <div className={`${sidebarOpen ? "w-64" : "w-0"} transition-all duration-300 bg-discord-darker border-r border-gray-700/30 flex flex-col overflow-hidden`}>
+        <div className="p-3 border-b border-gray-700/30">
           <button
-            type="submit"
-            disabled={!input.trim() || isLoading}
-            className="p-3 bg-gradient-to-r from-neon-purple to-neon-blue hover:from-neon-purple/90 hover:to-neon-blue/90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition-all duration-300 shadow-neon hover:shadow-[0_0_20px_rgba(176,38,255,0.5)]"
+            onClick={handleNewRoom}
+            className="flex items-center gap-2 w-full px-3 py-2 bg-neon-purple/20 hover:bg-neon-purple/30 border border-neon-purple/30 rounded-lg text-sm text-white transition-all"
           >
-            {isLoading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Send className="w-5 h-5" />
-            )}
+            <Plus className="w-4 h-4" />
+            New Chat
           </button>
         </div>
-      </form>
+        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          {rooms.map(room => (
+            <div
+              key={room.id}
+              onClick={() => setActiveRoomId(room.id)}
+              className={`group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all ${
+                activeRoomId === room.id
+                  ? "bg-neon-purple/20 border border-neon-purple/30"
+                  : "hover:bg-discord-darkest border border-transparent"
+              }`}
+            >
+              <MessageSquare className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                {editingRoom === room.id ? (
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleRenameRoom(room.id)}
+                    onBlur={() => handleRenameRoom(room.id)}
+                    autoFocus
+                    className="w-full bg-discord-darkest border border-gray-700/50 rounded px-2 py-0.5 text-sm text-white focus:outline-none focus:border-neon-purple/50"
+                  />
+                ) : (
+                  <div className="text-sm text-white truncate">{room.name}</div>
+                )}
+                <div className="text-xs text-gray-500">{room.messages.length} messages</div>
+              </div>
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={e => { e.stopPropagation(); setEditingRoom(room.id); setEditName(room.name) }}
+                  className="p-1 hover:bg-discord-darkest rounded text-gray-400 hover:text-white"
+                >
+                  <Edit2 className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={e => { e.stopPropagation(); handleClearRoom(room.id) }}
+                  className="p-1 hover:bg-discord-darkest rounded text-gray-400 hover:text-yellow-400"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={e => { e.stopPropagation(); handleDeleteRoom(room.id) }}
+                  className="p-1 hover:bg-discord-darkest rounded text-gray-400 hover:text-red-400"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700/30 bg-discord-darker/50">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="p-1.5 hover:bg-discord-darkest rounded-lg text-gray-400 hover:text-white transition-colors"
+            >
+              <MessageSquare className="w-4 h-4" />
+            </button>
+            <div>
+              <h2 className="text-sm font-semibold text-white">{activeRoom?.name || "E AI"}</h2>
+              <p className="text-xs text-gray-500">{activeRoom?.messages.length || 0} messages</p>
+            </div>
+          </div>
+          <div className="w-64">
+            <ModelSelector
+              models={models}
+              selected={activeRoom?.model || getDefaultModel()}
+              onSelect={handleModelChange}
+              type="chat"
+            />
+          </div>
+        </div>
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {activeRoom?.messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <div className="w-16 h-16 bg-gradient-to-br from-neon-purple to-neon-blue rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-neon-purple/20">
+                <Sparkles className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="text-xl font-bold gradient-text mb-2">E AI</h3>
+              <p className="text-gray-400 max-w-md">
+                Start a conversation with E AI. You can ask questions, get help with coding, brainstorm ideas, or just chat.
+              </p>
+            </div>
+          )}
+          {activeRoom?.messages.map((msg, i) => (
+            <div
+              key={msg.id || i}
+              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+            >
+              <div
+                className={`max-w-[80%] rounded-2xl px-4 py-3 ${
+                  msg.role === "user"
+                    ? "bg-neon-purple/20 border border-neon-purple/30 text-white"
+                    : "bg-discord-darker border border-gray-700/30 text-gray-200"
+                }`}
+              >
+                {msg.role === "assistant" ? (
+                  <div className="prose prose-invert prose-sm max-w-none">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        code({ node, inline, className, children, ...props }: any) {
+                          const match = /language-(\w+)/.exec(className || "")
+                          return !inline && match ? (
+                            <SyntaxHighlighter
+                              style={oneDark}
+                              language={match[1]}
+                              PreTag="div"
+                              {...props}
+                            >
+                              {String(children).replace(/
+$/, "")}
+                            </SyntaxHighlighter>
+                          ) : (
+                            <code className="bg-discord-darkest px-1.5 py-0.5 rounded text-sm text-neon-blue" {...props}>
+                              {children}
+                            </code>
+                          )
+                        },
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                )}
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-700/20">
+                  <span className="text-xs text-gray-500">
+                    {new Date(msg.timestamp).toLocaleTimeString()}
+                    {msg.model && ` · ${msg.model}`}
+                  </span>
+                  <button
+                    onClick={() => handleCopy(msg.content)}
+                    className="p-1 hover:bg-discord-darkest rounded text-gray-500 hover:text-neon-blue transition-colors"
+                  >
+                    <Copy className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Input Area */}
+        <div className="p-4 border-t border-gray-700/30 bg-discord-darker/50">
+          {isGenerating && (
+            <div className="mb-3">
+              <AITimer
+                isActive={isGenerating}
+                estimatedSeconds={estimateSeconds()}
+                retryCount={retryCount > 0 ? retryCount : undefined}
+                maxRetries={retryCount > 0 ? 8 : undefined}
+              />
+            </div>
+          )}
+          <div className="flex items-end gap-2">
+            <div className="flex-1 relative">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Message E AI..."
+                rows={1}
+                className="w-full bg-discord-darker border border-gray-700/50 rounded-xl px-4 py-3 pr-12 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-purple/50 resize-none max-h-32"
+              />
+            </div>
+            {isGenerating ? (
+              <button
+                onClick={handleStop}
+                className="p-3 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-xl text-red-400 transition-all"
+              >
+                <Square className="w-5 h-5" />
+              </button>
+            ) : (
+              <button
+                onClick={handleSend}
+                disabled={!input.trim()}
+                className="p-3 bg-neon-purple hover:bg-purple-600 rounded-xl text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-neon-purple/20"
+              >
+                <Send className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
-  );
+  )
 }

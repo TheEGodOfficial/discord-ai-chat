@@ -5,5 +5,4 @@ const nextConfig = {
     domains: ['cdn.discordapp.com', 'media.discordapp.net'],
   },
 }
-
 module.exports = nextConfig

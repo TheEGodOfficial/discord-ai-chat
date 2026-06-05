@@ -1,168 +1,140 @@
-"use client";
-
-import { useState, useRef, useEffect } from "react";
-import { ChevronDown, Check, Search, Cpu } from "lucide-react";
-
-interface Model {
-  id: string;
-  name: string;
-  provider: string;
-  cost?: { input: number; output: number; currency: string; tokens: number };
-  context?: number;
-  max_tokens?: number;
-}
+"use client"
+import { useState, useRef, useEffect } from "react"
+import { ChevronDown, Search, Check, AlertCircle, Loader2 } from "lucide-react"
+import { PuterModel } from "@/lib/puter"
 
 interface ModelSelectorProps {
-  models: Model[];
-  selected: string;
-  onSelect: (modelId: string) => void;
-  label?: string;
-  dropdownDirection?: "up" | "down" | "auto";
+  models: PuterModel[]
+  selected: string
+  onSelect: (id: string) => void
+  type: "chat" | "image" | "video"
+  label?: string
 }
 
-export default function ModelSelector({ 
-  models, 
-  selected, 
-  onSelect, 
-  label,
-  dropdownDirection = "auto" 
-}: ModelSelectorProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const [actualDirection, setActualDirection] = useState<"up" | "down">("down");
+export default function ModelSelector({ models, selected, onSelect, type, label }: ModelSelectorProps) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState("")
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
 
-  const selectedModel = models.find((m) => m.id === selected);
+  const filtered = models.filter(m => {
+    if (m.type !== type) return false
+    const q = search.toLowerCase()
+    return (
+      m.name.toLowerCase().includes(q) ||
+      m.id.toLowerCase().includes(q) ||
+      m.provider.toLowerCase().includes(q)
+    )
+  })
+
+  const grouped: Record<string, PuterModel[]> = {}
+  filtered.forEach(m => {
+    if (!grouped[m.provider]) grouped[m.provider] = []
+    grouped[m.provider].push(m)
+  })
+
+  const selectedModel = models.find(m => m.id === selected)
 
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    function handleClick(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
+        setOpen(false)
       }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [])
 
   useEffect(() => {
-    if (isOpen && buttonRef.current && dropdownDirection === "auto") {
-      const rect = buttonRef.current.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceAbove = rect.top;
-      const dropdownHeight = 450;
-
-      if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
-        setActualDirection("up");
-      } else {
-        setActualDirection("down");
-      }
-    } else if (dropdownDirection !== "auto") {
-      setActualDirection(dropdownDirection);
+    if (open && searchRef.current) {
+      searchRef.current.focus()
     }
-  }, [isOpen, dropdownDirection]);
+  }, [open])
 
-  const filteredModels = models.filter(
-    (m) =>
-      m.name.toLowerCase().includes(search.toLowerCase()) ||
-      m.provider.toLowerCase().includes(search.toLowerCase()) ||
-      m.id.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const grouped = filteredModels.reduce((acc, model) => {
-    if (!acc[model.provider]) acc[model.provider] = [];
-    acc[model.provider].push(model);
-    return acc;
-  }, {} as Record<string, Model[]>);
+  function getStatusColor(status?: string) {
+    switch (status) {
+      case "online": return "bg-green-500"
+      case "offline": return "bg-red-500"
+      case "checking": return "bg-yellow-500 animate-pulse"
+      default: return "bg-gray-500"
+    }
+  }
 
   return (
     <div className="relative" ref={dropdownRef}>
+      {label && (
+        <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">
+          {label}
+        </label>
+      )}
       <button
-        ref={buttonRef}
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-4 py-2.5 bg-surface-dark border border-[rgba(176,38,255,0.2)] rounded-xl text-sm hover:border-neon-purple/40 transition-all duration-300 min-w-[220px] group"
+        onClick={() => setOpen(!open)}
+        className="flex items-center justify-between w-full px-4 py-2.5 bg-discord-darker border border-gray-700/50 rounded-lg text-sm text-white hover:border-neon-purple/50 transition-all"
       >
-        <Cpu className="w-4 h-4 text-neon-purple/50 group-hover:text-neon-purple transition-colors" />
-        <span className="flex-1 text-left truncate text-gray-300">
-          {selectedModel ? selectedModel.name : "Select model"}
-        </span>
-        <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`} />
+        <div className="flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full ${getStatusColor(selectedModel?.status)}`} />
+          <span className="truncate">{selectedModel?.name || "Select a model"}</span>
+        </div>
+        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
-      {isOpen && (
-        <div 
-          className="fixed z-[100] w-96 bg-surface-dark/95 backdrop-blur-xl border border-[rgba(176,38,255,0.2)] rounded-2xl shadow-[0_0_40px_rgba(0,0,0,0.5),0_0_20px_rgba(176,38,255,0.1)] overflow-hidden flex flex-col"
+      {open && (
+        <div className="fixed z-[100] mt-1 w-80 bg-discord-darker border border-gray-700/50 rounded-lg shadow-2xl shadow-black/50 overflow-hidden"
           style={{
-            ...(actualDirection === "down" 
-              ? { top: (buttonRef.current?.getBoundingClientRect().bottom ?? 0) + 8 }
-              : { bottom: (window.innerHeight - (buttonRef.current?.getBoundingClientRect().top ?? 0)) + 8 }
-            ),
-            left: Math.min(
-              buttonRef.current?.getBoundingClientRect().left ?? 0,
-              window.innerWidth - 400
-            ),
-            maxHeight: "500px",
+            top: dropdownRef.current ? dropdownRef.current.getBoundingClientRect().bottom + 4 : 0,
+            left: dropdownRef.current ? dropdownRef.current.getBoundingClientRect().left : 0,
           }}
         >
-          <div className="p-3 border-b border-[rgba(176,38,255,0.1)] shrink-0">
-            <div className="flex items-center gap-2 px-3 py-2 bg-surface-black/80 rounded-xl border border-[rgba(176,38,255,0.15)]">
-              <Search className="w-4 h-4 text-neon-purple/50" />
+          <div className="p-2 border-b border-gray-700/50">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
               <input
+                ref={searchRef}
                 type="text"
+                placeholder="Search models..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search neural models..."
-                className="flex-1 bg-transparent outline-none text-sm text-white placeholder-gray-600"
-                autoFocus
+                onChange={e => setSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-discord-darkest border border-gray-700/50 rounded-md text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-purple/50"
               />
             </div>
           </div>
-          <div className="overflow-y-auto p-2 space-y-1">
+          <div className="max-h-[400px] overflow-y-auto">
             {Object.entries(grouped).map(([provider, providerModels]) => (
               <div key={provider}>
-                <div className="px-3 py-1.5 text-xs font-semibold text-neon-purple/60 uppercase tracking-wider sticky top-0 bg-surface-dark/95 backdrop-blur-sm z-10">
+                <div className="sticky top-0 z-10 px-3 py-1.5 bg-discord-darkest/90 backdrop-blur text-xs font-semibold text-neon-blue uppercase tracking-wider">
                   {provider}
                 </div>
-                {providerModels.map((model) => (
+                {providerModels.map(model => (
                   <button
                     key={model.id}
-                    onClick={() => {
-                      onSelect(model.id);
-                      setIsOpen(false);
-                      setSearch("");
-                    }}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
-                      selected === model.id
-                        ? "bg-gradient-to-r from-neon-purple/20 to-neon-blue/10 text-neon-purple border border-neon-purple/20"
-                        : "text-gray-400 hover:text-white hover:bg-[rgba(176,38,255,0.08)]"
+                    onClick={() => { onSelect(model.id); setOpen(false); setSearch("") }}
+                    className={`flex items-center justify-between w-full px-3 py-2.5 text-left hover:bg-discord-darkest transition-colors ${
+                      selected === model.id ? "bg-discord-darkest/60" : ""
                     }`}
                   >
-                    {selected === model.id ? (
-                      <div className="w-5 h-5 rounded-full bg-neon-purple/20 flex items-center justify-center shrink-0">
-                        <Check className="w-3 h-3 text-neon-purple" />
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${getStatusColor(model.status)} flex-shrink-0`} />
+                      <div>
+                        <div className="text-sm text-white">{model.name}</div>
+                        {model.context && (
+                          <div className="text-xs text-gray-500">{model.context.toLocaleString()} context</div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="w-5 h-5 rounded-full border border-gray-700 shrink-0" />
-                    )}
-                    <div className="flex-1 text-left">
-                      <div className="font-medium">{model.name}</div>
-                      {model.context && (
-                        <div className="text-xs text-gray-600 mt-0.5">{model.context.toLocaleString()} context</div>
-                      )}
                     </div>
+                    {selected === model.id && <Check className="w-4 h-4 text-neon-purple flex-shrink-0" />}
                   </button>
                 ))}
               </div>
             ))}
-            {filteredModels.length === 0 && (
-              <div className="text-center py-6 text-gray-600 text-sm">
-                <Cpu className="w-8 h-8 mx-auto mb-2 text-gray-700" />
-                No neural models found
+            {filtered.length === 0 && (
+              <div className="px-3 py-4 text-sm text-gray-500 text-center">
+                <AlertCircle className="w-4 h-4 mx-auto mb-1" />
+                No models found
               </div>
             )}
           </div>
         </div>
       )}
     </div>
-  );
+  )
 }

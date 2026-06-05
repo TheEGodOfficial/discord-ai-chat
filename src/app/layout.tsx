@@ -8,8 +8,8 @@ import { authOptions } from "@/lib/auth"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "NEXUS AI - Discord Verified",
-  description: "AI-powered neural workspace with Discord role verification",
+  title: "E Private AI",
+  description: "Free AI Tools made for whitelisted users. Website made with Kiwi AI.",
 }
 
 export default async function RootLayout({
@@ -24,7 +24,7 @@ export default async function RootLayout({
       <head>
         <script src="https://js.puter.com/v2/" async></script>
       </head>
-      <body className={`${inter.className} bg-surface-black text-white min-h-screen`}>
+      <body className={`${inter.className} bg-discord-darkest text-white min-h-screen`}>
         <SessionProvider session={session}>
           {children}
         </SessionProvider>

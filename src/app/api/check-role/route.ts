@@ -37,18 +37,26 @@ export async function GET() {
     )
 
     if (!botRes.ok) {
+      const botError = await botRes.text()
       return NextResponse.json({
         hasRole: false,
-        error: "Bot cannot access member. Ensure bot is in server with proper permissions.",
+        error: "Bot API failed",
+        botStatus: botRes.status,
+        botError: botError,
+        userId: session.user.id,
+        guildId: process.env.DISCORD_GUILD_ID,
       })
     }
 
     const member = await botRes.json()
     const hasRole = member.roles?.includes(process.env.DISCORD_REQUIRED_ROLE_ID)
 
-    return NextResponse.json({ hasRole: !!hasRole, roles: member.roles })
-  } catch (error) {
-    console.error("Role check error:", error)
-    return NextResponse.json({ hasRole: false, error: "Server error" }, { status: 500 })
+    return NextResponse.json({
+      hasRole: !!hasRole,
+      roles: member.roles,
+      checkedRole: process.env.DISCORD_REQUIRED_ROLE_ID,
+    })
+  } catch (error: any) {
+    return NextResponse.json({ hasRole: false, error: "Server error", details: error.message }, { status: 500 })
   }
 }

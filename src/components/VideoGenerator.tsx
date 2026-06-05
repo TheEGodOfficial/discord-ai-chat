@@ -1,257 +1,315 @@
-"use client";
+"use client"
+import { useState, useRef, useEffect } from "react"
+import { VideoIcon, Download, Trash2, Play, X, Edit2, Loader2, Film } from "lucide-react"
+import ModelSelector from "./ModelSelector"
+import AITimer from "./AITimer"
+import { PuterModel } from "@/lib/puter"
+import { MediaItem, getVideoHistory, addVideoItem, deleteVideoItem, renameVideoItem } from "@/lib/media-history"
 
-import { useState, useEffect, useRef } from "react";
-import { Video, Loader2, Download, Wand2, Sparkles, Play, X, Film } from "lucide-react";
-import ModelSelector from "./ModelSelector";
-import ModelLoader, { ModelInfo } from "./ModelLoader";
-import AITimer from "./AITimer";
+interface VideoGeneratorProps {
+  models: PuterModel[]
+}
 
-const STORAGE_KEY = "ai-video-history";
-const MODEL_KEY = "ai-video-model";
-
-export default function VideoGenerator() {
-  const [prompt, setPrompt] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [generatedVideo, setGeneratedVideo] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem(MODEL_KEY) || "wan-2.7-text-to-video";
-    }
-    return "wan-2.7-text-to-video";
-  });
-  const [error, setError] = useState("");
-  const [videoHistory, setVideoHistory] = useState<{ url: string; prompt: string; model: string; id: string }[]>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        try { return JSON.parse(saved); } catch { return []; }
-      }
-    }
-    return [];
-  });
-  const [models, setModels] = useState<ModelInfo[]>([]);
-
-  const abortRef = useRef<AbortController | null>(null);
+export default function VideoGenerator({ models }: VideoGeneratorProps) {
+  const [prompt, setPrompt] = useState("")
+  const [selectedModel, setSelectedModel] = useState("")
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [history, setHistory] = useState<MediaItem[]>([])
+  const [selectedVideo, setSelectedVideo] = useState<MediaItem | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editPrompt, setEditPrompt] = useState("")
+  const [retryCount, setRetryCount] = useState(0)
+  const [visualizerBars, setVisualizerBars] = useState<number[]>(Array(12).fill(0))
+  const progressRef = useRef<NodeJS.Timeout | null>(null)
+  const durationRef = useRef<NodeJS.Timeout | null>(null)
+  const visualizerRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(videoHistory));
-  }, [videoHistory]);
+    setHistory(getVideoHistory())
+    const videoModels = models.filter(m => m.type === "video")
+    if (videoModels.length > 0 && !selectedModel) {
+      const online = videoModels.find(m => m.status === "online")
+      setSelectedModel(online?.id || videoModels[0].id)
+    }
+  }, [models])
 
   useEffect(() => {
-    localStorage.setItem(MODEL_KEY, selectedModel);
-  }, [selectedModel]);
-
-  const handleModelsLoaded = (loadedModels: ModelInfo[]) => {
-    setModels(loadedModels);
-
-    const modelExists = loadedModels.some(m => m.id === selectedModel);
-    if (!modelExists && loadedModels.length > 0) {
-      setSelectedModel(loadedModels[0].id);
+    if (isGenerating) {
+      setProgress(0)
+      setDuration(0)
+      progressRef.current = setInterval(() => {
+        setProgress(prev => {
+          const remaining = 100 - prev
+          const increment = remaining * 0.02
+          const next = prev + increment + Math.random() * 1
+          return Math.min(next, 98)
+        })
+      }, 1000)
+      durationRef.current = setInterval(() => {
+        setDuration(prev => prev + 1)
+      }, 1000)
+      visualizerRef.current = setInterval(() => {
+        setVisualizerBars(Array(12).fill(0).map(() => Math.random() * 100))
+      }, 200)
+    } else {
+      if (progressRef.current) clearInterval(progressRef.current)
+      if (durationRef.current) clearInterval(durationRef.current)
+      if (visualizerRef.current) clearInterval(visualizerRef.current)
+      setProgress(0)
+      setDuration(0)
+      setVisualizerBars(Array(12).fill(0))
     }
-  };
-
-  const generateVideo = async () => {
-    if (!prompt.trim() || isLoading) return;
-    setIsLoading(true);
-    setError("");
-    setGeneratedVideo(null);
-
-    abortRef.current = new AbortController();
-
-    try {
-      const puter = (window as any).puter;
-      if (!puter) {
-        throw new Error("Puter.js not loaded");
-      }
-
-      const result = await puter.ai.txt2vid(prompt, {
-        model: selectedModel,
-      });
-
-      if (abortRef.current?.signal.aborted) return;
-
-      const videoUrl = typeof result === "string" ? result : result?.url || result;
-
-      if (videoUrl) {
-        setGeneratedVideo(videoUrl);
-        const newItem = { url: videoUrl, prompt, model: selectedModel, id: Date.now().toString() };
-        setVideoHistory((prev) => [newItem, ...prev]);
-      } else {
-        throw new Error("No video generated");
-      }
-    } catch (err: any) {
-      if (err.name === "AbortError") return;
-      setError(err.message || "Failed to generate video");
-    } finally {
-      setIsLoading(false);
-      abortRef.current = null;
+    return () => {
+      if (progressRef.current) clearInterval(progressRef.current)
+      if (durationRef.current) clearInterval(durationRef.current)
+      if (visualizerRef.current) clearInterval(visualizerRef.current)
     }
-  };
+  }, [isGenerating])
 
-  const cancelGeneration = () => {
-    abortRef.current?.abort();
-    setIsLoading(false);
-  };
+  const handleGenerate = async () => {
+    if (!prompt.trim() || !selectedModel || isGenerating) return
+    setIsGenerating(true)
+    setRetryCount(0)
 
-  const downloadVideo = (url: string) => {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `generated-video-${Date.now()}.mp4`;
-    link.target = "_blank";
-    link.click();
-  };
+    const puter = (window as any).puter
+    if (!puter?.ai?.txt2img) {
+      setIsGenerating(false)
+      return
+    }
 
-  const removeFromHistory = (id: string) => {
-    setVideoHistory((prev) => prev.filter((item) => item.id !== id));
-  };
+    let attempt = 0
+    const maxRetries = 8
+    let videoUrl = ""
+    let success = false
+    let finalDuration = 0
+
+    while (attempt < maxRetries) {
+      attempt++
+      setRetryCount(attempt)
+      try {
+        const result = await puter.ai.txt2img(prompt.trim(), {
+          model: selectedModel,
+        })
+
+        if (result && result.src) {
+          videoUrl = result.src
+          finalDuration = duration
+          success = true
+          break
+        }
+      } catch (err: any) {
+        console.warn(`Video attempt ${attempt}/${maxRetries} failed:`, err)
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 10000))
+        }
+      }
+    }
+
+    if (success && videoUrl) {
+      const updated = addVideoItem(prompt.trim(), videoUrl, selectedModel, finalDuration)
+      setHistory(updated)
+    }
+
+    setIsGenerating(false)
+    setRetryCount(0)
+    setProgress(100)
+    setTimeout(() => setProgress(0), 500)
+  }
+
+  const handleDelete = (id: string) => {
+    const updated = deleteVideoItem(id)
+    setHistory(updated)
+    if (selectedVideo?.id === id) setSelectedVideo(null)
+  }
+
+  const handleRename = (id: string) => {
+    if (editPrompt.trim()) {
+      const updated = renameVideoItem(id, editPrompt.trim())
+      setHistory(updated)
+    }
+    setEditingId(null)
+    setEditPrompt("")
+  }
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, "0")}`
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      <ModelLoader onModelsLoaded={handleModelsLoaded} type="video" />
-
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="relative w-10 h-10">
-            <div className="absolute inset-0 bg-neon-blue/30 rounded-xl blur-lg animate-pulse-glow" />
-            <div className="relative w-10 h-10 bg-gradient-to-br from-neon-blue to-neon-pink rounded-xl flex items-center justify-center shadow-neon-blue">
-              <Video className="w-5 h-5 text-white" />
-            </div>
+      {/* Generator */}
+      <div className="glass-panel p-6 rounded-2xl border border-gray-700/30">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-gradient-to-br from-neon-blue to-neon-purple rounded-xl flex items-center justify-center shadow-lg shadow-neon-blue/20">
+            <VideoIcon className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h2 className="font-semibold text-white tracking-wide">Temporal Synthesis</h2>
-            <p className="text-xs text-gray-500">Generate temporal constructs from neural prompts</p>
+            <h2 className="text-lg font-bold text-white">Temporal Synthesis</h2>
+            <p className="text-xs text-gray-400">Generate videos with AI</p>
           </div>
         </div>
-        <ModelSelector
-          models={models.length > 0 ? models : [{ id: "wan-2.7-text-to-video", name: "Wan 2.7 Text-to-Video", provider: "Wan AI" }]}
-          selected={selectedModel}
-          onSelect={setSelectedModel}
-          label="Model"
-          dropdownDirection="down"
-        />
-      </div>
 
-      <AITimer isGenerating={isLoading} modelType="video" modelId={selectedModel} />
-
-      {/* Input */}
-      <div className="glass-panel p-8">
-        <div className="space-y-5">
+        <div className="space-y-4">
           <div>
-            <label className="text-sm font-medium text-gray-400 mb-2 block uppercase tracking-wider text-xs">Neural Prompt</label>
+            <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">
+              Prompt
+            </label>
             <textarea
               value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe the temporal construct... e.g., 'A holographic data stream flowing through a dark neural corridor, cyan and purple light trails, cinematic slow motion'"
-              className="w-full input-futuristic p-5 text-white placeholder-gray-600 resize-none h-36 text-sm leading-relaxed"
+              onChange={e => setPrompt(e.target.value)}
+              placeholder="Describe the video you want to generate..."
+              rows={3}
+              className="w-full bg-discord-darker border border-gray-700/50 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-blue/50 resize-none"
             />
           </div>
-          <div className="flex items-center gap-3 text-xs text-gray-600">
-            <div className="w-1.5 h-1.5 rounded-full bg-neon-blue animate-pulse" />
-            <span>Temporal synthesis may require 30s-3m depending on model complexity</span>
+
+          <div className="w-64">
+            <ModelSelector
+              models={models}
+              selected={selectedModel}
+              onSelect={setSelectedModel}
+              type="video"
+              label="Model"
+            />
           </div>
-          <div className="flex gap-3">
-            <button
-              onClick={generateVideo}
-              disabled={!prompt.trim() || isLoading}
-              className="btn-primary px-8 py-3.5 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Synthesizing Temporal...
-                </>
-              ) : (
-                <>
-                  <Wand2 className="w-5 h-5" />
-                  Generate Temporal
-                </>
-              )}
-            </button>
-            {isLoading && (
-              <button
-                onClick={cancelGeneration}
-                className="flex items-center gap-2 px-5 py-3.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-all duration-300 border border-red-500/20 hover:border-red-500/40 font-medium"
-              >
-                <X className="w-5 h-5" />
-                Abort
-              </button>
-            )}
-          </div>
+
+          {isGenerating && (
+            <div className="space-y-3">
+              <AITimer
+                isActive={isGenerating}
+                estimatedSeconds={120}
+                retryCount={retryCount > 0 ? retryCount : undefined}
+                maxRetries={retryCount > 0 ? 8 : undefined}
+              />
+
+              {/* Visualizer */}
+              <div className="flex items-center gap-1 justify-center h-16">
+                {visualizerBars.map((height, i) => (
+                  <div
+                    key={i}
+                    className="w-2 bg-gradient-to-t from-neon-blue to-neon-purple rounded-full transition-all duration-200"
+                    style={{ height: `${Math.max(height * 0.6, 4)}px` }}
+                  />
+                ))}
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs text-gray-400">
+                  <span>Duration: {formatDuration(duration)}</span>
+                  <span>{Math.round(progress)}%</span>
+                </div>
+                <div className="w-full h-2 bg-discord-darkest rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-neon-blue via-neon-purple to-neon-pink transition-all duration-1000"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-400 text-center">
+                  {progress < 20 ? "Initializing temporal synthesis..." : progress < 50 ? "Generating frames..." : progress < 80 ? "Rendering motion..." : "Finalizing video..."}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <button
+            onClick={handleGenerate}
+            disabled={!prompt.trim() || isGenerating}
+            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-neon-blue to-neon-purple hover:from-blue-400 hover:to-purple-400 rounded-xl text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-neon-blue/20"
+          >
+            {isGenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Film className="w-5 h-5" />}
+            {isGenerating ? "Synthesizing..." : "Generate Video"}
+          </button>
         </div>
       </div>
 
-      {/* Error */}
-      {error && (
-        <div className="glass-panel p-5 border-red-500/30 bg-red-500/5">
-          <p className="text-red-400 text-sm flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            {error}
-          </p>
+      {/* Selected Video View */}
+      {selectedVideo && (
+        <div className="glass-panel p-6 rounded-2xl border border-gray-700/30 animate-fade-in">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              {editingId === selectedVideo.id ? (
+                <input
+                  value={editPrompt}
+                  onChange={e => setEditPrompt(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleRename(selectedVideo.id)}
+                  onBlur={() => handleRename(selectedVideo.id)}
+                  autoFocus
+                  className="bg-discord-darkest border border-gray-700/50 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-neon-blue/50"
+                />
+              ) : (
+                <p className="text-sm text-gray-300">{selectedVideo.prompt}</p>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { setEditingId(selectedVideo.id); setEditPrompt(selectedVideo.prompt) }}
+                className="p-2 hover:bg-discord-darkest rounded-lg text-gray-400 hover:text-white transition-colors"
+              >
+                <Edit2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => handleDelete(selectedVideo.id)}
+                className="p-2 hover:bg-discord-darkest rounded-lg text-gray-400 hover:text-red-400 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setSelectedVideo(null)}
+                className="p-2 hover:bg-discord-darkest rounded-lg text-gray-400 hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          <video
+            src={selectedVideo.url}
+            controls
+            className="w-full max-h-[500px] rounded-xl border border-gray-700/30"
+          />
+          {selectedVideo.duration && (
+            <p className="text-xs text-gray-500 mt-2">Duration: {formatDuration(selectedVideo.duration)}</p>
+          )}
         </div>
       )}
 
-      {/* Generated Video */}
-      {generatedVideo && (
-        <div className="glass-panel p-8 animate-fade-in">
-          <div className="flex items-center justify-between mb-5">
-            <h3 className="font-medium text-white flex items-center gap-2 tracking-wide">
-              <Play className="w-4 h-4 text-neon-blue" />
-              Temporal Result
-            </h3>
-            <button
-              onClick={() => downloadVideo(generatedVideo)}
-              className="flex items-center gap-2 px-4 py-2 bg-surface-dark hover:bg-surface-elevated text-gray-300 rounded-xl text-sm transition-all duration-300 border border-[rgba(0,243,255,0.15)] hover:border-neon-blue/30 hover:shadow-neon-blue"
-            >
-              <Download className="w-4 h-4" />
-              Download
-            </button>
-          </div>
-          <div className="rounded-2xl overflow-hidden bg-black border border-[rgba(0,243,255,0.1)]">
-            <video
-              src={generatedVideo}
-              controls
-              className="w-full max-h-[500px]"
-            />
-          </div>
-          <p className="mt-4 text-sm text-gray-500 italic border-l-2 border-neon-blue/30 pl-3">{prompt}</p>
-        </div>
-      )}
-
-      {/* History */}
-      {videoHistory.length > 0 && (
-        <div className="space-y-4">
-          <h3 className="font-medium text-gray-400 uppercase tracking-wider text-xs">Archive</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {videoHistory.map((item) => (
+      {/* History Grid */}
+      {history.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Archive</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {history.map(item => (
               <div
                 key={item.id}
-                className="glass-panel p-3 cursor-pointer hover:border-neon-blue/30 transition-all duration-300 group relative overflow-hidden"
-                onClick={() => setGeneratedVideo(item.url)}
+                onClick={() => setSelectedVideo(item)}
+                className="group relative aspect-video rounded-xl overflow-hidden border border-gray-700/30 cursor-pointer hover:border-neon-blue/50 transition-all bg-discord-darker"
               >
-                <button
-                  onClick={(e) => { e.stopPropagation(); removeFromHistory(item.id); }}
-                  className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-red-500/80 rounded-lg text-white opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-                <div className="aspect-video rounded-xl overflow-hidden bg-black mb-2 relative">
-                  <video
-                    src={item.url}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 group-hover:bg-black/20 transition-all duration-300">
-                    <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center group-hover:scale-110 transition-transform">
-                      <Play className="w-6 h-6 text-white opacity-80" />
-                    </div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Play className="w-12 h-12 text-white/50 group-hover:text-white/80 transition-colors" />
+                </div>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute bottom-0 left-0 right-0 p-3">
+                    <p className="text-xs text-white line-clamp-2">{item.prompt}</p>
+                    <p className="text-xs text-gray-400 mt-1">{item.model}</p>
+                    {item.duration && (
+                      <p className="text-xs text-neon-blue">{formatDuration(item.duration)}</p>
+                    )}
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 truncate px-1">{item.prompt}</p>
-                <p className="text-xs text-gray-700 px-1 mt-0.5">{item.model}</p>
+                <button
+                  onClick={e => { e.stopPropagation(); handleDelete(item.id) }}
+                  className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-red-500/50 rounded-lg text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
               </div>
             ))}
           </div>
         </div>
       )}
     </div>
-  );
+  )
 }
