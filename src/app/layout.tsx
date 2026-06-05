@@ -2,7 +2,6 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { SessionProvider } from "@/components/SessionProvider"
-import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 
 const inter = Inter({ subsets: ["latin"] })
@@ -12,12 +11,25 @@ export const metadata: Metadata = {
   description: "AI-powered neural workspace with Discord role verification",
 }
 
+// Helper function that works with both import styles
+async function getSession() {
+  try {
+    // Try the App Router import first
+    const { getServerSession } = await import("next-auth/next")
+    return await getServerSession(authOptions)
+  } catch {
+    // Fallback to direct import
+    const { getServerSession } = await import("next-auth")
+    return await getServerSession(authOptions)
+  }
+}
+
 export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
 
   return (
     <html lang="en" className="dark">

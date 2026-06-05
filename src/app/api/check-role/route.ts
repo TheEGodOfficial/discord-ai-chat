@@ -1,9 +1,19 @@
-import { getServerSession } from "next-auth/next"
 import { NextResponse } from "next/server"
 import { authOptions } from "@/lib/auth"
 
+// Helper function that works with both import styles
+async function getSession() {
+  try {
+    const { getServerSession } = await import("next-auth/next")
+    return await getServerSession(authOptions)
+  } catch {
+    const { getServerSession } = await import("next-auth")
+    return await getServerSession(authOptions)
+  }
+}
+
 export async function GET() {
-  const session = await getServerSession(authOptions)
+  const session = await getSession()
 
   if (!session?.accessToken) {
     return NextResponse.json({ hasRole: false, error: "Not authenticated" }, { status: 401 })
