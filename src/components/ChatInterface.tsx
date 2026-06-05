@@ -5,7 +5,7 @@ import { Send, Copy, Trash2, Plus, MessageSquare, X, Edit2, Square, Sparkles } f
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
-import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism"
+import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism"
 import ModelSelector from "./ModelSelector"
 import AITimer from "./AITimer"
 import { PuterModel } from "@/lib/puter"
