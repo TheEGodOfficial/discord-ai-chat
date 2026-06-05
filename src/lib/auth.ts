@@ -40,4 +40,5 @@ export const {
     signIn: "/",
     error: "/",
   },
+  trustHost: true,
 })

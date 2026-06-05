@@ -2,7 +2,12 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 
 export async function GET() {
-  const session = await auth()
+  let session
+  try {
+    session = await auth()
+  } catch (e) {
+    return NextResponse.json({ hasRole: false, error: "Auth failed" }, { status: 401 })
+  }
 
   if (!session?.accessToken) {
     return NextResponse.json({ hasRole: false, error: "Not authenticated" }, { status: 401 })
