@@ -116,11 +116,11 @@ export async function fetchModelsWithRetry(maxRetries = 8, delayMs = 10000): Pro
   return []
 }
 
-async function checkWithTimeout<T>(fn: () => Promise<T>, timeoutMs: number): Promise<T | "timeout"> {
+async function checkWithTimeout(fn: () => Promise<"online" | "offline" | "unknown">, timeoutMs: number): Promise<"online" | "offline" | "unknown" | "timeout"> {
   return Promise.race([
     fn(),
-    new Promise<"timeout">((_, reject) => 
-      setTimeout(() => reject("timeout"), timeoutMs)
+    new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error("timeout")), timeoutMs)
     )
   ]).catch(() => "timeout" as const)
 }
@@ -132,7 +132,7 @@ export async function checkModelHealth(modelId: string): Promise<"online" | "off
   try {
     const result = await checkWithTimeout(async () => {
       await puter.ai.chat("hi", { model: modelId })
-      return "online"
+      return "online" as const
     }, 5000)
 
     if (result === "timeout") return "unknown"
@@ -153,7 +153,7 @@ export async function checkImageModelHealth(modelId: string): Promise<"online" |
   try {
     const result = await checkWithTimeout(async () => {
       await puter.ai.txt2img("test", { model: modelId })
-      return "online"
+      return "online" as const
     }, 5000)
 
     if (result === "timeout") return "unknown"
@@ -174,7 +174,7 @@ export async function checkVideoModelHealth(modelId: string): Promise<"online" |
   try {
     const result = await checkWithTimeout(async () => {
       await puter.ai.txt2vid("test", { model: modelId })
-      return "online"
+      return "online" as const
     }, 5000)
 
     if (result === "timeout") return "unknown"
