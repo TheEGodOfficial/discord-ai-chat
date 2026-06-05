@@ -78,6 +78,13 @@ export async function fetchModelsWithRetry(maxRetries = 8, delayMs = 10000): Pro
         throw new Error("Empty model list")
       }
 
+      // Log raw models for debugging
+      console.log("[E Private AI] Raw models from Puter.js (" + rawModels.length + " total):")
+      rawModels.forEach((m: any) => {
+        const detectedType = detectModelType(m)
+        console.log("  " + m.id + " | " + (m.provider || "no-provider") + " | detected: " + detectedType + " | aliases: " + (m.aliases || []).join(", "))
+      })
+
       const models: PuterModel[] = rawModels.map((m: any) => ({
         id: m.id || "",
         provider: m.provider || "unknown",
@@ -90,7 +97,7 @@ export async function fetchModelsWithRetry(maxRetries = 8, delayMs = 10000): Pro
         status: "unknown" as const,
       })).filter((m: PuterModel) => m.id && m.type !== "audio" && m.type !== "other")
 
-      console.log("[E Private AI] Loaded " + models.length + " models from Puter.js:")
+      console.log("[E Private AI] Filtered to " + models.length + " usable models:")
       console.log("  Chat: " + models.filter(m => m.type === "chat").length)
       console.log("  Image: " + models.filter(m => m.type === "image").length)
       console.log("  Video: " + models.filter(m => m.type === "video").length)
@@ -109,16 +116,32 @@ export async function fetchModelsWithRetry(maxRetries = 8, delayMs = 10000): Pro
   return []
 }
 
+async function checkWithTimeout<T>(fn: () => Promise<T>, timeoutMs: number): Promise<T | "timeout"> {
+  return Promise.race([
+    fn(),
+    new Promise<"timeout">((_, reject) => 
+      setTimeout(() => reject("timeout"), timeoutMs)
+    )
+  ]).catch(() => "timeout" as const)
+}
+
 export async function checkModelHealth(modelId: string): Promise<"online" | "offline" | "unknown"> {
   const puter = getPuter()
   if (!puter?.ai?.chat) return "unknown"
 
   try {
-    await puter.ai.chat("hi", { model: modelId, testMode: true })
-    return "online"
+    const result = await checkWithTimeout(async () => {
+      await puter.ai.chat("hi", { model: modelId })
+      return "online"
+    }, 5000)
+
+    if (result === "timeout") return "unknown"
+    return result
   } catch (err: any) {
-    if (err?.message?.includes("rate limit") || err?.message?.includes("quota")) return "online"
-    if (err?.message?.includes("not found") || err?.message?.includes("invalid")) return "offline"
+    const msg = (err?.message || "").toLowerCase()
+    if (msg.includes("rate limit") || msg.includes("quota") || msg.includes("credit")) return "online"
+    if (msg.includes("not found") || msg.includes("invalid") || msg.includes("does not exist")) return "offline"
+    if (msg.includes("timeout")) return "unknown"
     return "unknown"
   }
 }
@@ -128,11 +151,18 @@ export async function checkImageModelHealth(modelId: string): Promise<"online" |
   if (!puter?.ai?.txt2img) return "unknown"
 
   try {
-    await puter.ai.txt2img("test", { model: modelId, testMode: true })
-    return "online"
+    const result = await checkWithTimeout(async () => {
+      await puter.ai.txt2img("test", { model: modelId })
+      return "online"
+    }, 5000)
+
+    if (result === "timeout") return "unknown"
+    return result
   } catch (err: any) {
-    if (err?.message?.includes("rate limit") || err?.message?.includes("quota")) return "online"
-    if (err?.message?.includes("not found") || err?.message?.includes("invalid")) return "offline"
+    const msg = (err?.message || "").toLowerCase()
+    if (msg.includes("rate limit") || msg.includes("quota") || msg.includes("credit")) return "online"
+    if (msg.includes("not found") || msg.includes("invalid") || msg.includes("does not exist")) return "offline"
+    if (msg.includes("timeout")) return "unknown"
     return "unknown"
   }
 }
@@ -142,11 +172,18 @@ export async function checkVideoModelHealth(modelId: string): Promise<"online" |
   if (!puter?.ai?.txt2vid) return "unknown"
 
   try {
-    await puter.ai.txt2vid("test", { model: modelId, testMode: true })
-    return "online"
+    const result = await checkWithTimeout(async () => {
+      await puter.ai.txt2vid("test", { model: modelId })
+      return "online"
+    }, 5000)
+
+    if (result === "timeout") return "unknown"
+    return result
   } catch (err: any) {
-    if (err?.message?.includes("rate limit") || err?.message?.includes("quota")) return "online"
-    if (err?.message?.includes("not found") || err?.message?.includes("invalid")) return "offline"
+    const msg = (err?.message || "").toLowerCase()
+    if (msg.includes("rate limit") || msg.includes("quota") || msg.includes("credit")) return "online"
+    if (msg.includes("not found") || msg.includes("invalid") || msg.includes("does not exist")) return "offline"
+    if (msg.includes("timeout")) return "unknown"
     return "unknown"
   }
 }
@@ -155,9 +192,9 @@ export function startHealthChecks(models: PuterModel[], intervalMs = 30000) {
   if (healthCheckInterval) clearInterval(healthCheckInterval)
 
   const updateHealth = async () => {
-    for (const model of models) {
+    // Run all checks in parallel instead of sequentially
+    const checks = models.map(async (model) => {
       model.status = "checking"
-      notifyHealthListeners(models)
 
       let result: "online" | "offline" | "unknown" = "unknown"
       if (model.type === "chat") {
@@ -169,8 +206,11 @@ export function startHealthChecks(models: PuterModel[], intervalMs = 30000) {
       }
 
       model.status = result
-      notifyHealthListeners(models)
-    }
+    })
+
+    // Notify listeners once after all checks complete
+    await Promise.all(checks)
+    notifyHealthListeners(models)
   }
 
   updateHealth()

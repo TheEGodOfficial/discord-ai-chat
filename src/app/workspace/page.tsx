@@ -222,7 +222,7 @@ function WorkspaceContent() {
               {activeTab === "chat" && <ChatInterface models={models} />}
               {activeTab === "image" && <ImageGenerator models={models} />}
               {activeTab === "video" && <VideoGenerator models={models} />}
-              {activeTab === "models" && <ModelsTab models={models} />}
+              {activeTab === "models" && <ModelsTab models={models} onRefresh={() => startHealthChecks(models, 30000)} isChecking={models.some(m => m.status === "checking")} />}
             </div>
           )}
         </main>
