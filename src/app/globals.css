@@ -6,11 +6,17 @@
   --neon-purple: #b026ff;
   --neon-blue: #00f3ff;
   --neon-pink: #ff00aa;
+  --discord-darkest: #050508;
+  --discord-darker: #0a0a12;
+  --discord-dark: #12121f;
 }
 
 @layer base {
   body {
-    @apply bg-discord-darkest text-white antialiased;
+    background-color: var(--discord-darkest);
+    color: white;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     background-image:
       radial-gradient(ellipse at top, rgba(176, 38, 255, 0.08) 0%, transparent 50%),
       radial-gradient(ellipse at bottom, rgba(0, 243, 255, 0.05) 0%, transparent 50%);
@@ -37,12 +43,17 @@
 
 @layer components {
   .glass-panel {
-    @apply bg-discord-dark/80 backdrop-blur-xl border border-gray-700/30;
+    background-color: rgba(18, 18, 31, 0.8);
+    backdrop-filter: blur(24px);
+    border: 1px solid rgba(55, 65, 81, 0.3);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   }
 
   .gradient-text {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-neon-purple via-neon-blue to-neon-pink;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    background-image: linear-gradient(to right, #b026ff, #00f3ff, #ff00aa);
   }
 }
 
