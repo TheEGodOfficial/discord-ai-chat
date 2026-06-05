@@ -1,68 +1,78 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Loader2, Sparkles, Trash2, Copy, Check } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Send, Bot, User, Loader2, Sparkles, Trash2, Copy, Check, Zap } from "lucide-react";
 import ModelSelector from "./ModelSelector";
+import ModelLoader, { ModelInfo } from "./ModelLoader";
+import AITimer from "./AITimer";
 
 type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
-  timestamp: Date;
+  timestamp: number;
   isStreaming?: boolean;
 };
 
-const CHAT_MODELS = [
-  { id: "openai/gpt-5.4-nano", name: "GPT-5.4 Nano", provider: "OpenAI" },
-  { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5", provider: "Anthropic" },
-  { id: "claude-opus-4-7", name: "Claude Opus 4.7", provider: "Anthropic" },
-  { id: "gemini-3.5-flash", name: "Gemini 3.5 Flash", provider: "Google" },
-  { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro", provider: "Google" },
-  { id: "deepseek-chat", name: "DeepSeek Chat", provider: "DeepSeek" },
-  { id: "grok-3", name: "Grok 3", provider: "xAI" },
-  { id: "qwen3.6-max", name: "Qwen 3.6 Max", provider: "Qwen" },
-  { id: "qwen3.6-27b", name: "Qwen 3.6 27B", provider: "Qwen" },
-  { id: "kimi-k2.6", name: "Kimi K2.6", provider: "Moonshot AI" },
-  { id: "kimi-k2.5", name: "Kimi K2.5", provider: "Moonshot AI" },
-  { id: "minimax-m3", name: "MiniMax M3", provider: "MiniMax" },
-  { id: "step-3.7-flash", name: "Step 3.7 Flash", provider: "StepFun" },
-  { id: "glm-5.1", name: "GLM 5.1", provider: "Z.AI" },
-  { id: "ring-2.6-1t", name: "Ring 2.6 1T", provider: "InclusionAI" },
-  { id: "ling-2.6-flash", name: "Ling 2.6 Flash", provider: "InclusionAI" },
-  { id: "solar-pro-3", name: "Solar Pro 3", provider: "Upstage" },
-  { id: "kat-coder-pro-v2", name: "KAT Coder Pro V2", provider: "KwaiPilot" },
-  { id: "aion-2.0", name: "Aion 2.0", provider: "Aion Labs" },
-  { id: "inflection-3-pi", name: "Inflection 3 Pi", provider: "Inflection" },
-  { id: "inflection-3-productivity", name: "Inflection 3 Productivity", provider: "Inflection" },
-  { id: "lfm2-24b", name: "LFM2 24B", provider: "Liquid AI" },
-  { id: "trinity-large", name: "Trinity Large", provider: "Arcee AI" },
-  { id: "magnum-v4-72b", name: "Magnum v4 72B", provider: "Anthracite" },
-  { id: "seed-2.0-mini", name: "Seed 2.0 Mini", provider: "ByteDance" },
-  { id: "cobuddy", name: "CoBuddy", provider: "Tencent" },
-  { id: "qwen3-coder-next", name: "Qwen3 Coder Next", provider: "Qwen" },
-  { id: "ministral-3b", name: "Ministral 3B", provider: "Mistral" },
-  { id: "ministral-8b", name: "Ministral 8B", provider: "Mistral" },
-  { id: "reka-edge", name: "Reka Edge", provider: "Reka" },
-];
+const STORAGE_KEY = "ai-chat-messages";
+const MODEL_KEY = "ai-chat-model";
 
 export default function ChatInterface() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          return parsed.map((m: Message) => ({ ...m, timestamp: new Date(m.timestamp).getTime() }));
+        } catch { return []; }
+      }
+    }
+    return [];
+  });
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState("openai/gpt-5.4-nano");
+  const [selectedModel, setSelectedModel] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem(MODEL_KEY) || "gpt-4o";
+    }
+    return "gpt-4o";
+  });
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [modelsLoaded, setModelsLoaded] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isGeneratingRef = useRef(false);
 
-  const scrollToBottom = () => {
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+  }, [messages]);
+
+  useEffect(() => {
+    localStorage.setItem(MODEL_KEY, selectedModel);
+  }, [selectedModel]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        scrollToBottom();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, scrollToBottom]);
 
-  // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -70,22 +80,32 @@ export default function ChatInterface() {
     }
   }, [input]);
 
+  const handleModelsLoaded = (loadedModels: ModelInfo[]) => {
+    setModels(loadedModels);
+    setModelsLoaded(true);
+
+    const modelExists = loadedModels.some(m => m.id === selectedModel);
+    if (!modelExists && loadedModels.length > 0) {
+      setSelectedModel(loadedModels[0].id);
+    }
+  };
+
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || isGeneratingRef.current) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
       content: input.trim(),
-      timestamp: new Date(),
+      timestamp: Date.now(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
+    isGeneratingRef.current = true;
 
-    // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
@@ -95,11 +115,14 @@ export default function ChatInterface() {
       id: assistantId,
       role: "assistant",
       content: "",
-      timestamp: new Date(),
+      timestamp: Date.now(),
       isStreaming: true,
     };
 
     setMessages((prev) => [...prev, assistantMessage]);
+
+    const controller = new AbortController();
+    setAbortController(controller);
 
     try {
       const puter = (window as any).puter;
@@ -121,6 +144,7 @@ export default function ChatInterface() {
 
       let fullContent = "";
       for await (const part of response) {
+        if (controller.signal.aborted) break;
         if (part?.text) {
           fullContent += part.text;
           setMessages((prev) =>
@@ -139,6 +163,9 @@ export default function ChatInterface() {
         )
       );
     } catch (error: any) {
+      if (error.name === "AbortError") {
+        return;
+      }
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
@@ -152,6 +179,8 @@ export default function ChatInterface() {
       );
     } finally {
       setIsLoading(false);
+      isGeneratingRef.current = false;
+      setAbortController(null);
     }
   };
 
@@ -163,7 +192,11 @@ export default function ChatInterface() {
   };
 
   const clearChat = () => {
+    if (abortController) {
+      abortController.abort();
+    }
     setMessages([]);
+    localStorage.removeItem(STORAGE_KEY);
   };
 
   const copyMessage = (id: string, content: string) => {
@@ -174,29 +207,35 @@ export default function ChatInterface() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-140px)] max-w-5xl mx-auto">
+      <ModelLoader onModelsLoaded={handleModelsLoaded} type="chat" />
+
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-            <Bot className="w-4 h-4 text-white" />
+          <div className="relative w-10 h-10">
+            <div className="absolute inset-0 bg-neon-blue/30 rounded-xl blur-lg animate-pulse-glow" />
+            <div className="relative w-10 h-10 bg-gradient-to-br from-neon-purple to-neon-blue rounded-xl flex items-center justify-center shadow-neon">
+              <Bot className="w-5 h-5 text-white" />
+            </div>
           </div>
           <div>
-            <h2 className="font-semibold text-white">AI Chat</h2>
-            <p className="text-xs text-gray-400">{messages.length} messages</p>
+            <h2 className="font-semibold text-white tracking-wide">Neural Chat</h2>
+            <p className="text-xs text-gray-500">{messages.length} transmissions</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <ModelSelector
-            models={CHAT_MODELS}
+            models={models.length > 0 ? models : [{ id: "gpt-4o", name: "GPT-4o", provider: "OpenAI" }]}
             selected={selectedModel}
             onSelect={setSelectedModel}
             label="Model"
+            dropdownDirection="down"
           />
           {messages.length > 0 && (
             <button
               onClick={clearChat}
-              className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-              title="Clear chat"
+              className="p-2.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all duration-300 border border-transparent hover:border-red-500/20"
+              title="Clear transmissions"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -204,13 +243,27 @@ export default function ChatInterface() {
         </div>
       </div>
 
+      {/* Timer */}
+      <div className="mb-3">
+        <AITimer isGenerating={isLoading} modelType="chat" modelId={selectedModel} />
+      </div>
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-gray-500">
-            <Sparkles className="w-12 h-12 mb-4 text-discord-blurple/50" />
-            <p className="text-lg font-medium">Start a conversation</p>
-            <p className="text-sm">Select a model and send your first message</p>
+            <div className="relative mb-6">
+              <div className="absolute inset-0 bg-neon-purple/20 rounded-full blur-2xl animate-pulse-glow" />
+              <Sparkles className="relative w-16 h-16 text-neon-purple/50" />
+            </div>
+            <p className="text-xl font-medium gradient-text mb-2">Initialize Neural Link</p>
+            <p className="text-sm text-gray-600">Select a model and transmit your first message</p>
+            {!modelsLoaded && (
+              <p className="text-xs text-gray-700 mt-3 flex items-center gap-2">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Synchronizing model database...
+              </p>
+            )}
           </div>
         )}
 
@@ -220,42 +273,46 @@ export default function ChatInterface() {
             className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
           >
             <div
-              className={`max-w-[80%] rounded-2xl px-4 py-3 ${
+              className={`max-w-[80%] rounded-2xl px-5 py-4 ${
                 message.role === "user"
-                  ? "bg-discord-blurple text-white rounded-br-sm"
-                  : "bg-discord-darker border border-gray-700/50 text-gray-100 rounded-bl-sm"
+                  ? "message-user rounded-br-sm"
+                  : "message-ai rounded-bl-sm"
               }`}
             >
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-2">
                 {message.role === "assistant" ? (
-                  <Bot className="w-4 h-4 text-blue-400" />
+                  <div className="w-6 h-6 rounded-full bg-neon-blue/20 flex items-center justify-center">
+                    <Bot className="w-3.5 h-3.5 text-neon-blue" />
+                  </div>
                 ) : (
-                  <User className="w-4 h-4 text-white" />
+                  <div className="w-6 h-6 rounded-full bg-neon-purple/20 flex items-center justify-center">
+                    <User className="w-3.5 h-3.5 text-neon-purple" />
+                  </div>
                 )}
-                <span className="text-xs font-medium opacity-70">
-                  {message.role === "user" ? "You" : "AI"}
+                <span className="text-xs font-medium opacity-70 uppercase tracking-wider">
+                  {message.role === "user" ? "Operator" : "Neural Net"}
                 </span>
-                <span className="text-xs opacity-50">
-                  {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                <span className="text-xs opacity-40">
+                  {new Date(message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </span>
               </div>
               <div className="whitespace-pre-wrap text-sm leading-relaxed">
                 {message.content}
                 {message.isStreaming && (
-                  <span className="inline-block w-2 h-4 bg-blue-400 ml-1 animate-pulse" />
+                  <span className="inline-block w-1.5 h-4 bg-neon-blue ml-1 animate-pulse shadow-[0_0_8px_rgba(0,243,255,0.8)]" />
                 )}
               </div>
               {message.role === "assistant" && !message.isStreaming && (
-                <div className="flex items-center gap-1 mt-2">
+                <div className="flex items-center gap-1 mt-3 pt-2 border-t border-[rgba(0,243,255,0.1)]">
                   <button
                     onClick={() => copyMessage(message.id, message.content)}
-                    className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors"
-                    title="Copy"
+                    className="p-1.5 text-gray-500 hover:text-neon-blue hover:bg-neon-blue/10 rounded-lg transition-all duration-300"
+                    title="Copy transmission"
                   >
                     {copiedId === message.id ? (
-                      <Check className="w-3 h-3 text-green-400" />
+                      <Check className="w-3.5 h-3.5 text-green-400" />
                     ) : (
-                      <Copy className="w-3 h-3" />
+                      <Copy className="w-3.5 h-3.5" />
                     )}
                   </button>
                 </div>
@@ -274,15 +331,15 @@ export default function ChatInterface() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type your message... (Shift+Enter for new line)"
-            className="flex-1 bg-transparent border-none outline-none text-white placeholder-gray-500 resize-none max-h-32 py-2 px-3 text-sm"
+            placeholder="Transmit message... (Shift+Enter for newline)"
+            className="flex-1 bg-transparent border-none outline-none text-white placeholder-gray-600 resize-none max-h-32 py-3 px-4 text-sm"
             rows={1}
             disabled={isLoading}
           />
           <button
             type="submit"
             disabled={!input.trim() || isLoading}
-            className="p-2.5 bg-discord-blurple hover:bg-discord-blurple/90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-all"
+            className="p-3 bg-gradient-to-r from-neon-purple to-neon-blue hover:from-neon-purple/90 hover:to-neon-blue/90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition-all duration-300 shadow-neon hover:shadow-[0_0_20px_rgba(176,38,255,0.5)]"
           >
             {isLoading ? (
               <Loader2 className="w-5 h-5 animate-spin" />

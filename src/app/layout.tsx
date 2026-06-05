@@ -1,23 +1,23 @@
-import type { Metadata } from "next"
-import { Inter } from "next/font/google"
-import "./globals.css"
-import { SessionProvider } from "@/components/SessionProvider"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+import { SessionProvider } from "@/components/SessionProvider";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 
-const inter = Inter({ subsets: ["latin"] })
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "AI Chat - Discord Verified",
   description: "AI-powered chat with Discord role verification",
-}
+};
 
 export default async function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
-  const session = await getServerSession(authOptions)
+  const session = await getServerSession(authOptions);
 
   return (
     <html lang="en" className="dark">
@@ -30,5 +30,5 @@ export default async function RootLayout({
         </SessionProvider>
       </body>
     </html>
-  )
+  );
 }
