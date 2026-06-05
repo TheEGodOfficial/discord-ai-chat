@@ -399,7 +399,7 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
                 onKeyDown={handleKeyDown}
                 placeholder="Message E AI..."
                 rows={1}
-                className="w-full bg-discord-darkest border border-gray-700/50 rounded-xl px-4 py-3 pr-12 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-purple/50 resize-none max-h-32"
+                className="w-full !bg-[#0a0a12] border border-gray-700/50 rounded-xl px-4 py-3 pr-12 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-purple/50 resize-none max-h-32"
               />
             </div>
             {isGenerating ? (

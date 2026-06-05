@@ -162,7 +162,7 @@ export default function VideoGenerator({ models }: VideoGeneratorProps) {
               onChange={e => setPrompt(e.target.value)}
               placeholder="Describe the video you want to create. Be as detailed as possible for the best results."
               rows={3}
-              className="w-full bg-discord-darkest border border-gray-700/50 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-blue/50 resize-none"
+              className="w-full !bg-[#0a0a12] border border-gray-700/50 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-blue/50 resize-none"
             />
           </div>
 
