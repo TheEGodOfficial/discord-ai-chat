@@ -20,13 +20,13 @@ export const authOptions: NextAuthOptions = {
         token.id = (profile as any).id
         token.image = (profile as any).avatar
           ? `https://cdn.discordapp.com/avatars/${(profile as any).id}/${(profile as any).avatar}.png`
-          : null
+          : undefined
       }
       return token
     },
     async session({ session, token }) {
       session.user.id = token.id as string
-      session.user.image = token.image as string
+      session.user.image = (token.image as string) || undefined
       session.accessToken = token.accessToken as string
       return session
     },
