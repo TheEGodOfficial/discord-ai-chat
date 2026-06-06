@@ -78,12 +78,13 @@ export async function GET() {
     }
 
     const member: DiscordMember = await botRes.json()
-    const hasRole = member.roles?.includes(process.env.DISCORD_REQUIRED_ROLE_ID)
+    const requiredRoleId = process.env.DISCORD_REQUIRED_ROLE_ID
+    const hasRole = requiredRoleId ? member.roles?.includes(requiredRoleId) : false
 
     return NextResponse.json({
       hasRole: !!hasRole,
       roles: member.roles,
-      checkedRole: process.env.DISCORD_REQUIRED_ROLE_ID,
+      checkedRole: requiredRoleId,
     })
   } catch (error: any) {
     return NextResponse.json({ hasRole: false, error: "Server error", details: error.message }, { status: 500 })
