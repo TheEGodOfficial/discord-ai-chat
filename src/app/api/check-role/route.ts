@@ -2,6 +2,35 @@ import { getServerSession } from "next-auth/next"
 import { NextResponse } from "next/server"
 import { authOptions } from "@/lib/auth"
 
+interface DiscordGuild {
+  id: string
+  name: string
+  icon: string | null
+  owner: boolean
+  permissions: number
+  features: string[]
+}
+
+interface DiscordMember {
+  user?: {
+    id: string
+    username: string
+    discriminator: string
+    avatar: string | null
+  }
+  nick: string | null
+  avatar: string | null
+  roles: string[]
+  joined_at: string
+  premium_since: string | null
+  deaf: boolean
+  mute: boolean
+  flags: number
+  pending: boolean
+  permissions: number
+  communication_disabled_until: string | null
+}
+
 export async function GET() {
   const session = await getServerSession(authOptions)
 
@@ -20,8 +49,8 @@ export async function GET() {
       return NextResponse.json({ hasRole: false, error: "Failed to fetch guilds" }, { status: 500 })
     }
 
-    const guilds = await guildsRes.json()
-    const targetGuild = guilds.find((g: any) => g.id === process.env.DISCORD_GUILD_ID)
+    const guilds: DiscordGuild[] = await guildsRes.json()
+    const targetGuild = guilds.find((g) => g.id === process.env.DISCORD_GUILD_ID)
 
     if (!targetGuild) {
       return NextResponse.json({ hasRole: false, error: "Not in server" })
@@ -48,7 +77,7 @@ export async function GET() {
       })
     }
 
-    const member = await botRes.json()
+    const member: DiscordMember = await botRes.json()
     const hasRole = member.roles?.includes(process.env.DISCORD_REQUIRED_ROLE_ID)
 
     return NextResponse.json({
