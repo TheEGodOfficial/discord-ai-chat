@@ -8,7 +8,7 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism"
 import ModelSelector from "./ModelSelector"
 import AITimer from "./AITimer"
-import { PuterModel } from "@/lib/puter"
+import { PuterModel, streamChatResponse, getDefaultModel } from "@/lib/puter"
 import {
   ChatRoom, ChatMessage,
   getRooms, createRoom, deleteRoom, renameRoom,
@@ -44,7 +44,7 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
     const loaded = getRooms()
     setRooms(loaded)
     if (loaded.length === 0) {
-      const newRoom = createRoom("New Chat", getDefaultModel())
+      const newRoom = createRoom("New Chat", getDefaultModel("chat", models))
       setRooms([newRoom])
       setActiveRoomId(newRoom.id)
     } else {
@@ -64,15 +64,8 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
     }
   }, [input])
 
-  function getDefaultModel(): string {
-    const chatModels = models.filter(m => m.type === "chat")
-    if (chatModels.length === 0) return "gpt-5-nano"
-    const online = chatModels.find(m => m.status === "online")
-    return online?.id || chatModels[0].id
-  }
-
   const handleNewRoom = () => {
-    const newRoom = createRoom(`Chat ${rooms.length + 1}`, getDefaultModel())
+    const newRoom = createRoom(`Chat ${rooms.length + 1}`, getDefaultModel("chat", models))
     setRooms(getRooms())
     setActiveRoomId(newRoom.id)
   }
@@ -137,39 +130,23 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
 
     let attempt = 0
     const maxRetries = 8
-    let assistantContent = ""
     let success = false
 
     while (attempt < maxRetries && !abortRef.current) {
       attempt++
       setRetryCount(attempt)
-      try {
-        const stream = await puter.ai.chat(messages, {
-          model: activeRoom?.model || getDefaultModel(),
-          stream: true,
-        })
 
-        assistantContent = ""
-
-        // Use iterator instead of for-await to avoid syntax issues
-        const iterator = stream[Symbol.asyncIterator]()
-        let done = false
-
-        while (!done && !abortRef.current) {
-          const { value: part, done: iterDone } = await iterator.next()
-          done = iterDone || false
-
-          if (part && part.text) {
-            assistantContent += part.text
-          }
-
+      const result = await streamChatResponse(
+        messages,
+        activeRoom?.model || getDefaultModel("chat", models),
+        (content) => {
           const currentRoomIdLive = activeRoomIdRef.current
           const currentRoom = getRoomById(currentRoomIdLive)
           if (currentRoom) {
             const tempMsg: ChatMessage = {
               id: "temp-" + Date.now(),
               role: "assistant",
-              content: assistantContent,
+              content: content,
               timestamp: Date.now(),
               model: activeRoom?.model,
             }
@@ -180,23 +157,13 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
             )
             setRooms(updatedRooms)
           }
-        }
+        },
+        () => abortRef.current
+      )
 
-        if (!abortRef.current) {
-          success = true
-          break
-        }
-      } catch (err: any) {
-        console.warn("Chat attempt " + attempt + "/" + maxRetries + " failed:", err)
-        if (attempt < maxRetries && !abortRef.current) {
-          await new Promise(r => setTimeout(r, 10000))
-        }
-      }
-    }
-
-    if (!abortRef.current) {
-      const finalRoomId = activeRoomIdRef.current
-      if (success && assistantContent) {
+      if (result.success && !abortRef.current) {
+        success = true
+        const finalRoomId = activeRoomIdRef.current
         const allRooms = getRooms()
         const cleanedRooms = allRooms.map(r =>
           r.id === finalRoomId
@@ -207,20 +174,29 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
         if (typeof window !== "undefined") {
           localStorage.setItem(tempKey, JSON.stringify({ version: "v1", data: cleanedRooms }))
         }
-        addMessage(finalRoomId, { role: "assistant", content: assistantContent, model: activeRoom?.model })
-      } else {
-        addMessage(finalRoomId, {
-          role: "assistant",
-          content: "E AI ran into a problem while generating a response. The model might be down right now. Try again in a moment or pick a different model from the dropdown above.",
-          model: activeRoom?.model,
-        })
+        addMessage(finalRoomId, { role: "assistant", content: result.content, model: activeRoom?.model })
+        setRooms(getRooms())
+        break
       }
+
+      if (attempt < maxRetries && !abortRef.current) {
+        await new Promise(r => setTimeout(r, 10000))
+      }
+    }
+
+    if (!success && !abortRef.current) {
+      const finalRoomId = activeRoomIdRef.current
+      addMessage(finalRoomId, {
+        role: "assistant",
+        content: "E AI ran into a problem while generating a response. The model might be down right now. Try again in a moment or pick a different model from the dropdown above.",
+        model: activeRoom?.model,
+      })
       setRooms(getRooms())
     }
 
     setIsGenerating(false)
     setRetryCount(0)
-  }, [input, isGenerating, activeRoom?.model])
+  }, [input, isGenerating, activeRoom?.model, models])
 
   const handleStop = () => {
     abortRef.current = true
@@ -251,7 +227,6 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
 
   return (
     <div className="flex h-[calc(100vh-140px)] gap-4">
-      {/* Sidebar */}
       <div className={`${sidebarOpen ? "w-64" : "w-0"} transition-all duration-300 bg-discord-darker border border-white/5 rounded-xl flex flex-col overflow-hidden`}>
         <div className="p-3 border-b border-white/5">
           <button
@@ -323,9 +298,7 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
         </div>
       </div>
 
-      {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0 bg-discord-darker border border-white/5 rounded-xl overflow-hidden">
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-white/5">
           <div className="flex items-center gap-3">
             <button
@@ -343,14 +316,13 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
           <div className="w-56">
             <ModelSelector
               models={models}
-              selected={activeRoom?.model || getDefaultModel()}
+              selected={activeRoom?.model || getDefaultModel("chat", models)}
               onSelect={handleModelChange}
               type="chat"
             />
           </div>
         </div>
 
-        {/* Messages */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {activeRoom?.messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-center">
@@ -389,8 +361,7 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
                               PreTag="div"
                               {...props}
                             >
-                              {String(children).replace(/
-$/, "")}
+                              {String(children).replace(/\n$/, "")}
                             </SyntaxHighlighter>
                           ) : (
                             <code className="bg-black/30 px-1.5 py-0.5 rounded text-sm text-blue-400" {...props}>
@@ -427,7 +398,6 @@ $/, "")}
           <div ref={bottomRef} />
         </div>
 
-        {/* Input */}
         <div className="p-4 border-t border-white/5">
           {isGenerating && (
             <div className="mb-3">

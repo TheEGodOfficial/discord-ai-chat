@@ -104,10 +104,8 @@ async function waitForPuter(maxWaitMs = 30000): Promise<boolean> {
 }
 
 export async function fetchModelsWithRetry(maxRetries = 8, delayMs = 10000): Promise<PuterModel[]> {
-  // First, always include static models so UI isn't empty
   const staticModels = [...STATIC_IMAGE_MODELS, ...STATIC_VIDEO_MODELS]
 
-  // Wait for Puter.js to load
   const puterReady = await waitForPuter(15000)
 
   if (!puterReady) {
@@ -159,6 +157,45 @@ export async function fetchModelsWithRetry(maxRetries = 8, delayMs = 10000): Pro
   return allModels
 }
 
+// === STREAMING CHAT HELPER ===
+// This is extracted from the component to avoid for-await syntax issues in JSX files.
+export async function streamChatResponse(
+  messages: Array<{ role: string; content: string }>,
+  model: string,
+  onChunk: (text: string) => void,
+  shouldAbort: () => boolean
+): Promise<{ success: boolean; content: string }> {
+  const puter = getPuter()
+  if (!puter?.ai?.chat) {
+    return { success: false, content: "" }
+  }
+
+  try {
+    const stream = await puter.ai.chat(messages, { model, stream: true })
+    let content = ""
+
+    const iterator = stream[Symbol.asyncIterator]()
+    let done = false
+
+    while (!done) {
+      if (shouldAbort()) break
+      const result = await iterator.next()
+      done = result.done || false
+
+      const part = result.value
+      if (part && part.text) {
+        content += part.text
+        onChunk(content)
+      }
+    }
+
+    return { success: !shouldAbort() && content.length > 0, content }
+  } catch (err) {
+    console.warn("Stream chat error:", err)
+    return { success: false, content: "" }
+  }
+}
+
 // === HEALTH CHECK SYSTEM ===
 let healthCheckModels: PuterModel[] = []
 
@@ -198,7 +235,6 @@ async function checkImageEndpointHealth(): Promise<"online" | "offline" | "unkno
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 20000)
 
-    // Per Puter.js docs: txt2img(prompt, testMode) where testMode=true tests without credits
     const result = await Promise.race([
       puter.ai.txt2img("a red circle", true),
       new Promise((_, reject) => {
@@ -208,7 +244,6 @@ async function checkImageEndpointHealth(): Promise<"online" | "offline" | "unkno
 
     clearTimeout(timeout)
 
-    // If we get any result (even in test mode), the endpoint is available
     if (result !== undefined && result !== null) return "online"
     return "unknown"
   } catch (err: any) {
@@ -228,7 +263,6 @@ async function checkVideoEndpointHealth(): Promise<"online" | "offline" | "unkno
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 25000)
 
-    // Per Puter.js docs: txt2vid follows same pattern as txt2img
     const result = await Promise.race([
       puter.ai.txt2vid("a red circle", true),
       new Promise((_, reject) => {
@@ -249,13 +283,11 @@ async function checkVideoEndpointHealth(): Promise<"online" | "offline" | "unkno
   }
 }
 
-// IMMEDIATE notification for status changes (not debounced)
 function notifyHealthListenersImmediate() {
   const freshModels = healthCheckModels.map(m => ({ ...m }))
   healthListeners.forEach(cb => cb(freshModels))
 }
 
-// Debounced notification for batch updates at end
 let healthNotifyTimeout: NodeJS.Timeout | null = null
 
 function debouncedNotifyHealthListeners() {
@@ -273,7 +305,6 @@ export function startHealthChecks(models: PuterModel[], intervalMs = 30000) {
   healthCheckModels = models.map(m => ({ ...m }))
 
   async function runChecks() {
-    // Check chat models - set checking IMMEDIATELY so UI shows it
     const chatModels = healthCheckModels.filter(m => m.type === "chat")
     for (const m of chatModels) {
       const idx = healthCheckModels.findIndex(hm => hm.id === m.id)
@@ -283,7 +314,6 @@ export function startHealthChecks(models: PuterModel[], intervalMs = 30000) {
     }
     notifyHealthListenersImmediate()
 
-    // Check each chat model individually
     for (const model of chatModels) {
       const idx = healthCheckModels.findIndex(hm => hm.id === model.id)
       if (idx !== -1) {
@@ -293,7 +323,6 @@ export function startHealthChecks(models: PuterModel[], intervalMs = 30000) {
       }
     }
 
-    // Check image endpoint - set all image models to checking
     const imageModels = healthCheckModels.filter(m => m.type === "image")
     if (imageModels.length > 0) {
       for (const m of imageModels) {
@@ -314,7 +343,6 @@ export function startHealthChecks(models: PuterModel[], intervalMs = 30000) {
       notifyHealthListenersImmediate()
     }
 
-    // Check video endpoint - set all video models to checking
     const videoModels = healthCheckModels.filter(m => m.type === "video")
     if (videoModels.length > 0) {
       for (const m of videoModels) {
@@ -335,7 +363,6 @@ export function startHealthChecks(models: PuterModel[], intervalMs = 30000) {
       notifyHealthListenersImmediate()
     }
 
-    // Final debounced batch to catch any stragglers
     debouncedNotifyHealthListeners()
   }
 
