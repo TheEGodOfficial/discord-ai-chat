@@ -92,10 +92,9 @@ export default function VideoGenerator({ models }: VideoGeneratorProps) {
       attempt++
       setRetryCount(attempt)
       try {
-        // Per Puter.js docs: txt2vid returns an HTMLVideoElement
-        const result = await puter.ai.txt2vid(prompt.trim(), {
-          model: selectedModel,
-        })
+        // Per Puter.js docs: txt2vid follows same pattern as txt2img
+        // txt2vid(prompt, testMode) - returns HTMLVideoElement
+        const result = await puter.ai.txt2vid(prompt.trim(), false)
 
         // result is an HTMLVideoElement - get the src attribute
         if (result && typeof result.src === "string") {

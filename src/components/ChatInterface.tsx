@@ -32,10 +32,8 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const abortRef = useRef<boolean>(false)
-  // CRITICAL FIX: Use ref to track active room ID during async operations
   const activeRoomIdRef = useRef<string>("")
 
-  // Sync ref with state
   useEffect(() => {
     activeRoomIdRef.current = activeRoomId
   }, [activeRoomId])
@@ -146,20 +144,21 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
       attempt++
       setRetryCount(attempt)
       try {
-        // Use streaming API
+        // Per Puter.js docs: stream with { stream: true }
         const stream = await puter.ai.chat(messages, {
           model: activeRoom?.model || getDefaultModel(),
           stream: true,
         })
 
         assistantContent = ""
+        // Per Puter.js docs: for await (const part of resp)
         for await (const part of stream) {
           if (abortRef.current) break
-          // Per Puter.js docs: each part has .text property
+          // Per docs: part?.text
           const text = part?.text || ""
           assistantContent += text
 
-          // Update UI with streaming content - use ref to ensure correct room
+          // Update UI with streaming content
           const currentRoomIdLive = activeRoomIdRef.current
           const currentRoom = getRoomById(currentRoomIdLive)
           if (currentRoom) {
@@ -170,7 +169,6 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
               timestamp: Date.now(),
               model: activeRoom?.model,
             }
-            // Use immutable update pattern
             const updatedRooms = getRooms().map(r =>
               r.id === currentRoomIdLive
                 ? { ...r, messages: [...r.messages.filter(m => !m.id?.startsWith("temp-")), tempMsg] }
@@ -195,19 +193,16 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
     if (!abortRef.current) {
       const finalRoomId = activeRoomIdRef.current
       if (success && assistantContent) {
-        // First clean up temp messages from the room
         const allRooms = getRooms()
         const cleanedRooms = allRooms.map(r =>
           r.id === finalRoomId
             ? { ...r, messages: r.messages.filter(m => !m.id?.startsWith("temp-")) }
             : r
         )
-        // Save cleaned state temporarily
         const tempKey = "e-private-ai-chat-rooms-v1-temp"
         if (typeof window !== "undefined") {
           localStorage.setItem(tempKey, JSON.stringify({ version: "v1", data: cleanedRooms }))
         }
-        // Now add final message
         addMessage(finalRoomId, { role: "assistant", content: assistantContent, model: activeRoom?.model })
       } else {
         addMessage(finalRoomId, {

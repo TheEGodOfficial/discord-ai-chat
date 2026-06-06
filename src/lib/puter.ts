@@ -161,6 +161,65 @@ async function checkChatModelHealth(modelId: string): Promise<"online" | "offlin
   }
 }
 
+async function checkImageModelHealth(modelId: string): Promise<"online" | "offline" | "unknown"> {
+  const puter = getPuter()
+  if (!puter?.ai?.txt2img) return "unknown"
+
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 20000)
+
+    // Per Puter.js docs: txt2img(prompt, testMode) - testMode=true for testing without credits
+    const result = await Promise.race([
+      puter.ai.txt2img("a red circle", true),
+      new Promise((_, reject) => {
+        controller.signal.addEventListener("abort", () => reject(new Error("timeout")))
+      })
+    ])
+
+    clearTimeout(timeout)
+
+    // If we get any result (even in test mode), the endpoint is available
+    if (result !== undefined && result !== null) return "online"
+    return "unknown"
+  } catch (err: any) {
+    const msg = (err?.message || "").toLowerCase()
+    if (msg.includes("rate limit") || msg.includes("quota") || msg.includes("credit") || msg.includes("busy")) return "online"
+    if (msg.includes("not found") || msg.includes("invalid") || msg.includes("does not exist") || msg.includes("no such")) return "offline"
+    if (msg.includes("timeout") || msg.includes("abort") || msg.includes("network")) return "unknown"
+    return "unknown"
+  }
+}
+
+async function checkVideoModelHealth(modelId: string): Promise<"online" | "offline" | "unknown"> {
+  const puter = getPuter()
+  if (!puter?.ai?.txt2vid) return "unknown"
+
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 25000)
+
+    // Per Puter.js docs: txt2vid follows same pattern as txt2img
+    const result = await Promise.race([
+      puter.ai.txt2vid("a red circle", true),
+      new Promise((_, reject) => {
+        controller.signal.addEventListener("abort", () => reject(new Error("timeout")))
+      })
+    ])
+
+    clearTimeout(timeout)
+
+    if (result !== undefined && result !== null) return "online"
+    return "unknown"
+  } catch (err: any) {
+    const msg = (err?.message || "").toLowerCase()
+    if (msg.includes("rate limit") || msg.includes("quota") || msg.includes("credit") || msg.includes("busy")) return "online"
+    if (msg.includes("not found") || msg.includes("invalid") || msg.includes("does not exist") || msg.includes("no such")) return "offline"
+    if (msg.includes("timeout") || msg.includes("abort") || msg.includes("network")) return "unknown"
+    return "unknown"
+  }
+}
+
 // Debounce health notifications to prevent UI flicker during sequential checks
 let healthNotifyTimeout: NodeJS.Timeout | null = null
 let pendingHealthModels: PuterModel[] | null = null
@@ -188,39 +247,37 @@ export function startHealthChecks(models: PuterModel[], intervalMs = 30000) {
   healthCheckModels = models.map(m => ({ ...m }))
 
   async function runChecks() {
+    // Check chat models
     const chatModels = healthCheckModels.filter(m => m.type === "chat")
-
-    // Mark all as checking
     for (const m of chatModels) {
       m.status = "checking"
     }
     queueHealthNotification()
 
-    // Check each model sequentially
     for (const model of chatModels) {
       model.status = await checkChatModelHealth(model.id)
       queueHealthNotification()
     }
 
-    // Image/video: Mark as "online" if txt2img/txt2vid methods exist.
-    // Note: Individual model availability is handled by Puter.js routing.
-    // We mark as "online" to indicate the endpoint is available.
-    const puter = getPuter()
-    if (puter?.ai?.txt2img) {
-      for (const m of healthCheckModels) {
-        if (m.type === "image" && m.status === "unknown") {
-          m.status = "online"
-        }
+    // Check image models - use a single endpoint check since Puter.js handles model routing
+    const imageModels = healthCheckModels.filter(m => m.type === "image")
+    if (imageModels.length > 0) {
+      const imageEndpointStatus = await checkImageModelHealth(imageModels[0].id)
+      for (const m of imageModels) {
+        m.status = imageEndpointStatus
       }
+      queueHealthNotification()
     }
-    if (puter?.ai?.txt2vid) {
-      for (const m of healthCheckModels) {
-        if (m.type === "video" && m.status === "unknown") {
-          m.status = "online"
-        }
+
+    // Check video models - use a single endpoint check since Puter.js handles model routing
+    const videoModels = healthCheckModels.filter(m => m.type === "video")
+    if (videoModels.length > 0) {
+      const videoEndpointStatus = await checkVideoModelHealth(videoModels[0].id)
+      for (const m of videoModels) {
+        m.status = videoEndpointStatus
       }
+      queueHealthNotification()
     }
-    queueHealthNotification()
   }
 
   runChecks()
