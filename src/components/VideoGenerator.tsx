@@ -92,18 +92,14 @@ export default function VideoGenerator({ models }: VideoGeneratorProps) {
       attempt++
       setRetryCount(attempt)
       try {
-        // Per Puter.js docs: txt2vid(prompt, { model: "..." }) for real generation
-        // The second param is options object with model, NOT a boolean
         const result = await puter.ai.txt2vid(prompt.trim(), { model: selectedModel })
 
-        // result is an HTMLVideoElement - get the src attribute
         if (result && typeof result.src === "string") {
           videoUrl = result.src
           finalDuration = duration
           success = true
           break
         } else if (result && typeof result === "string") {
-          // Fallback: sometimes it might return a string URL directly
           videoUrl = result
           finalDuration = duration
           success = true
@@ -153,7 +149,6 @@ export default function VideoGenerator({ models }: VideoGeneratorProps) {
 
   return (
     <div className="space-y-6">
-      {/* Generator Panel */}
       <div className="glass-panel rounded-2xl p-6 border border-blue-500/10">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-700 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
@@ -243,7 +238,6 @@ export default function VideoGenerator({ models }: VideoGeneratorProps) {
         </div>
       </div>
 
-      {/* Selected Video Preview */}
       {selectedVideo && (
         <div className="glass-panel rounded-2xl p-6 border border-white/5 animate-fade-in">
           <div className="flex items-center justify-between mb-4">
@@ -293,7 +287,6 @@ export default function VideoGenerator({ models }: VideoGeneratorProps) {
         </div>
       )}
 
-      {/* History Grid */}
       {history.length > 0 && (
         <div>
           <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Your Creations</h3>

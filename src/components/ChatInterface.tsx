@@ -144,21 +144,25 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
       attempt++
       setRetryCount(attempt)
       try {
-        // Per Puter.js docs: stream with { stream: true }
         const stream = await puter.ai.chat(messages, {
           model: activeRoom?.model || getDefaultModel(),
           stream: true,
         })
 
         assistantContent = ""
-        // Per Puter.js docs: for await (const part of resp)
-        for await (const part of stream) {
-          if (abortRef.current) break
-          // Per docs: part?.text
-          const text = part?.text || ""
-          assistantContent += text
 
-          // Update UI with streaming content
+        // Use iterator instead of for-await to avoid syntax issues
+        const iterator = stream[Symbol.asyncIterator]()
+        let done = false
+
+        while (!done && !abortRef.current) {
+          const { value: part, done: iterDone } = await iterator.next()
+          done = iterDone || false
+
+          if (part && part.text) {
+            assistantContent += part.text
+          }
+
           const currentRoomIdLive = activeRoomIdRef.current
           const currentRoom = getRoomById(currentRoomIdLive)
           if (currentRoom) {

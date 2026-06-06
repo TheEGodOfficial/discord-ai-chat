@@ -37,14 +37,12 @@ export default function ModelSelector({ models, selected, onSelect, type, label 
 
   const selectedModel = models.find(m => m.id === selected)
 
-  // Update dropdown position when opening
   useEffect(() => {
     if (open && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect()
       const viewportHeight = window.innerHeight
-      const dropdownHeight = 400 // approximate max height
+      const dropdownHeight = 400
 
-      // Check if dropdown would go below viewport - flip to top if needed
       let top = rect.bottom + 4
       if (top + dropdownHeight > viewportHeight && rect.top - dropdownHeight > 0) {
         top = rect.top - dropdownHeight - 4
@@ -58,7 +56,6 @@ export default function ModelSelector({ models, selected, onSelect, type, label 
     }
   }, [open])
 
-  // Handle scroll and resize to update position dynamically
   useEffect(() => {
     if (!open) return
 

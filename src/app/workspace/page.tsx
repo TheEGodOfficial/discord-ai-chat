@@ -132,9 +132,7 @@ function WorkspaceContent() {
   if (hasRole === true) {
     return (
       <div className="min-h-screen bg-discord-darkest flex">
-        {/* Sidebar */}
         <aside className={`${sidebarCollapsed ? "w-16" : "w-60"} flex-shrink-0 bg-discord-darker border-r border-white/5 flex flex-col transition-all duration-300`}>
-          {/* Logo */}
           <div className="h-16 flex items-center px-4 border-b border-white/5">
             <div className="w-8 h-8 bg-gradient-to-br from-neon-purple to-neon-blue rounded-lg flex items-center justify-center flex-shrink-0">
               <Sparkles className="w-4 h-4 text-white" />
@@ -144,7 +142,6 @@ function WorkspaceContent() {
             )}
           </div>
 
-          {/* Navigation */}
           <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
             {!sidebarCollapsed && (
               <div className="px-3 mb-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Main</div>
@@ -185,7 +182,6 @@ function WorkspaceContent() {
             </button>
           </nav>
 
-          {/* User Profile */}
           <div className="p-3 border-t border-white/5">
             <div className={`flex items-center gap-3 ${sidebarCollapsed ? "justify-center" : ""}`}>
               {session.user?.image ? (
@@ -207,7 +203,6 @@ function WorkspaceContent() {
             </div>
           </div>
 
-          {/* Collapse Toggle */}
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             className="h-8 flex items-center justify-center border-t border-white/5 text-gray-500 hover:text-white transition-colors"
@@ -217,9 +212,7 @@ function WorkspaceContent() {
           </button>
         </aside>
 
-        {/* Main Content */}
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Header */}
           <header className="h-16 flex items-center justify-between px-6 border-b border-white/5 bg-discord-darker/50 backdrop-blur-sm">
             <div className="flex items-center gap-2 text-sm text-gray-400">
               <span className="text-gray-500">Dashboard</span>
@@ -236,7 +229,6 @@ function WorkspaceContent() {
             </div>
           </header>
 
-          {/* Content Area */}
           <main className="flex-1 overflow-y-auto p-6">
             {modelsLoading && activeTab !== "settings" ? (
               <div className="flex items-center justify-center h-full">
@@ -281,7 +273,6 @@ function WorkspaceContent() {
   return null
 }
 
-// Dashboard Home Component
 function DashboardHome({ models, onNavigate }: { models: PuterModel[], onNavigate: (tab: Tab) => void }) {
   const chatModels = models.filter(m => m.type === "chat")
   const imageModels = models.filter(m => m.type === "image")
@@ -297,7 +288,6 @@ function DashboardHome({ models, onNavigate }: { models: PuterModel[], onNavigat
 
   return (
     <div className="space-y-6">
-      {/* Welcome */}
       <div className="glass-panel rounded-2xl p-6 border border-purple-500/10">
         <div className="flex items-center justify-between">
           <div>
@@ -311,7 +301,6 @@ function DashboardHome({ models, onNavigate }: { models: PuterModel[], onNavigat
         </div>
       </div>
 
-      {/* Quick Actions */}
       <div>
         <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Quick Actions</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -331,9 +320,7 @@ function DashboardHome({ models, onNavigate }: { models: PuterModel[], onNavigat
         </div>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Model Stats */}
         <div className="glass-panel rounded-xl p-5">
           <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Model Distribution</h3>
           <div className="space-y-3">
@@ -372,7 +359,6 @@ function DashboardHome({ models, onNavigate }: { models: PuterModel[], onNavigat
           </div>
         </div>
 
-        {/* System Status */}
         <div className="glass-panel rounded-xl p-5">
           <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">System Status</h3>
           <div className="space-y-3">
@@ -400,7 +386,6 @@ function DashboardHome({ models, onNavigate }: { models: PuterModel[], onNavigat
           </div>
         </div>
 
-        {/* Quick Info */}
         <div className="glass-panel rounded-xl p-5">
           <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Quick Info</h3>
           <div className="space-y-3 text-sm">
@@ -423,7 +408,6 @@ function DashboardHome({ models, onNavigate }: { models: PuterModel[], onNavigat
   )
 }
 
-// Settings Tab
 function SettingsTab() {
   const { data: session } = useSession()
   const [activeSettingsTab, setActiveSettingsTab] = useState("overview")
@@ -452,7 +436,6 @@ function SettingsTab() {
 
       {activeSettingsTab === "overview" && (
         <div className="space-y-6">
-          {/* Profile Card */}
           <div className="glass-panel rounded-xl p-6">
             <div className="flex items-center gap-4">
               {session?.user?.image ? (
