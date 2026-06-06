@@ -74,10 +74,9 @@ export default function ImageGenerator({ models }: ImageGeneratorProps) {
       attempt++
       setRetryCount(attempt)
       try {
-        // Per Puter.js docs: txt2img(prompt, testMode)
-        // testMode = true for testing without using credits
-        // Returns an HTMLImageElement
-        const result = await puter.ai.txt2img(prompt.trim(), false)
+        // Per Puter.js docs: txt2img(prompt, { model: "..." }) for real generation
+        // The second param is options object with model, NOT a boolean
+        const result = await puter.ai.txt2img(prompt.trim(), { model: selectedModel })
 
         // result is an HTMLImageElement - get the src attribute
         if (result && typeof result.src === "string") {

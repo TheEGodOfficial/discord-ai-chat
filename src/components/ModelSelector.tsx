@@ -1,5 +1,5 @@
 "use client"
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect } from "react"
 import { ChevronDown, Search, Check, AlertCircle } from "lucide-react"
 import { PuterModel } from "@/lib/puter"
 

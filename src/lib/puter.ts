@@ -87,11 +87,40 @@ const STATIC_VIDEO_MODELS: PuterModel[] = [
   { id: "wan-ai/wan2.7-t2v", provider: "Wan AI", name: "Wan 2.7 T2V", type: "video", status: "unknown" },
 ]
 
+// Wait for Puter.js to be available with exponential backoff
+async function waitForPuter(maxWaitMs = 30000): Promise<boolean> {
+  const start = Date.now()
+  let delay = 100
+
+  while (Date.now() - start < maxWaitMs) {
+    const puter = getPuter()
+    if (puter?.ai) {
+      return true
+    }
+    await new Promise(r => setTimeout(r, delay))
+    delay = Math.min(delay * 1.5, 2000)
+  }
+  return false
+}
+
 export async function fetchModelsWithRetry(maxRetries = 8, delayMs = 10000): Promise<PuterModel[]> {
+  // First, always include static models so UI isn't empty
+  const staticModels = [...STATIC_IMAGE_MODELS, ...STATIC_VIDEO_MODELS]
+
+  // Wait for Puter.js to load
+  const puterReady = await waitForPuter(15000)
+
+  if (!puterReady) {
+    console.warn("[E Private AI] Puter.js did not load within 15s. Returning static models only.")
+    cachedModels = staticModels
+    return staticModels
+  }
+
   const puter = getPuter()
   if (!puter?.ai?.listModels) {
-    console.warn("[E Private AI] Puter.js not loaded or listModels not available")
-    return [...STATIC_IMAGE_MODELS, ...STATIC_VIDEO_MODELS]
+    console.warn("[E Private AI] Puter.js loaded but listModels not available. Returning static models only.")
+    cachedModels = staticModels
+    return staticModels
   }
 
   let chatModels: PuterModel[] = []
@@ -125,7 +154,7 @@ export async function fetchModelsWithRetry(maxRetries = 8, delayMs = 10000): Pro
     }
   }
 
-  const allModels = [...chatModels, ...STATIC_IMAGE_MODELS, ...STATIC_VIDEO_MODELS]
+  const allModels = [...chatModels, ...staticModels]
   cachedModels = allModels
   return allModels
 }
@@ -161,7 +190,7 @@ async function checkChatModelHealth(modelId: string): Promise<"online" | "offlin
   }
 }
 
-async function checkImageModelHealth(modelId: string): Promise<"online" | "offline" | "unknown"> {
+async function checkImageEndpointHealth(): Promise<"online" | "offline" | "unknown"> {
   const puter = getPuter()
   if (!puter?.ai?.txt2img) return "unknown"
 
@@ -169,7 +198,7 @@ async function checkImageModelHealth(modelId: string): Promise<"online" | "offli
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 20000)
 
-    // Per Puter.js docs: txt2img(prompt, testMode) - testMode=true for testing without credits
+    // Per Puter.js docs: txt2img(prompt, testMode) where testMode=true tests without credits
     const result = await Promise.race([
       puter.ai.txt2img("a red circle", true),
       new Promise((_, reject) => {
@@ -191,7 +220,7 @@ async function checkImageModelHealth(modelId: string): Promise<"online" | "offli
   }
 }
 
-async function checkVideoModelHealth(modelId: string): Promise<"online" | "offline" | "unknown"> {
+async function checkVideoEndpointHealth(): Promise<"online" | "offline" | "unknown"> {
   const puter = getPuter()
   if (!puter?.ai?.txt2vid) return "unknown"
 
@@ -220,26 +249,23 @@ async function checkVideoModelHealth(modelId: string): Promise<"online" | "offli
   }
 }
 
-// Debounce health notifications to prevent UI flicker during sequential checks
+// IMMEDIATE notification for status changes (not debounced)
+function notifyHealthListenersImmediate() {
+  const freshModels = healthCheckModels.map(m => ({ ...m }))
+  healthListeners.forEach(cb => cb(freshModels))
+}
+
+// Debounced notification for batch updates at end
 let healthNotifyTimeout: NodeJS.Timeout | null = null
-let pendingHealthModels: PuterModel[] | null = null
 
 function debouncedNotifyHealthListeners() {
   if (healthNotifyTimeout) {
     clearTimeout(healthNotifyTimeout)
   }
   healthNotifyTimeout = setTimeout(() => {
-    if (pendingHealthModels) {
-      const freshModels = pendingHealthModels.map(m => ({ ...m }))
-      healthListeners.forEach(cb => cb(freshModels))
-      pendingHealthModels = null
-    }
-  }, 150) // Batch updates within 150ms window
-}
-
-function queueHealthNotification() {
-  pendingHealthModels = healthCheckModels
-  debouncedNotifyHealthListeners()
+    const freshModels = healthCheckModels.map(m => ({ ...m }))
+    healthListeners.forEach(cb => cb(freshModels))
+  }, 150)
 }
 
 export function startHealthChecks(models: PuterModel[], intervalMs = 30000) {
@@ -247,37 +273,70 @@ export function startHealthChecks(models: PuterModel[], intervalMs = 30000) {
   healthCheckModels = models.map(m => ({ ...m }))
 
   async function runChecks() {
-    // Check chat models
+    // Check chat models - set checking IMMEDIATELY so UI shows it
     const chatModels = healthCheckModels.filter(m => m.type === "chat")
     for (const m of chatModels) {
-      m.status = "checking"
+      const idx = healthCheckModels.findIndex(hm => hm.id === m.id)
+      if (idx !== -1) {
+        healthCheckModels[idx] = { ...healthCheckModels[idx], status: "checking" }
+      }
     }
-    queueHealthNotification()
+    notifyHealthListenersImmediate()
 
+    // Check each chat model individually
     for (const model of chatModels) {
-      model.status = await checkChatModelHealth(model.id)
-      queueHealthNotification()
+      const idx = healthCheckModels.findIndex(hm => hm.id === model.id)
+      if (idx !== -1) {
+        const status = await checkChatModelHealth(model.id)
+        healthCheckModels[idx] = { ...healthCheckModels[idx], status }
+        notifyHealthListenersImmediate()
+      }
     }
 
-    // Check image models - use a single endpoint check since Puter.js handles model routing
+    // Check image endpoint - set all image models to checking
     const imageModels = healthCheckModels.filter(m => m.type === "image")
     if (imageModels.length > 0) {
-      const imageEndpointStatus = await checkImageModelHealth(imageModels[0].id)
       for (const m of imageModels) {
-        m.status = imageEndpointStatus
+        const idx = healthCheckModels.findIndex(hm => hm.id === m.id)
+        if (idx !== -1) {
+          healthCheckModels[idx] = { ...healthCheckModels[idx], status: "checking" }
+        }
       }
-      queueHealthNotification()
+      notifyHealthListenersImmediate()
+
+      const imageStatus = await checkImageEndpointHealth()
+      for (const m of imageModels) {
+        const idx = healthCheckModels.findIndex(hm => hm.id === m.id)
+        if (idx !== -1) {
+          healthCheckModels[idx] = { ...healthCheckModels[idx], status: imageStatus }
+        }
+      }
+      notifyHealthListenersImmediate()
     }
 
-    // Check video models - use a single endpoint check since Puter.js handles model routing
+    // Check video endpoint - set all video models to checking
     const videoModels = healthCheckModels.filter(m => m.type === "video")
     if (videoModels.length > 0) {
-      const videoEndpointStatus = await checkVideoModelHealth(videoModels[0].id)
       for (const m of videoModels) {
-        m.status = videoEndpointStatus
+        const idx = healthCheckModels.findIndex(hm => hm.id === m.id)
+        if (idx !== -1) {
+          healthCheckModels[idx] = { ...healthCheckModels[idx], status: "checking" }
+        }
       }
-      queueHealthNotification()
+      notifyHealthListenersImmediate()
+
+      const videoStatus = await checkVideoEndpointHealth()
+      for (const m of videoModels) {
+        const idx = healthCheckModels.findIndex(hm => hm.id === m.id)
+        if (idx !== -1) {
+          healthCheckModels[idx] = { ...healthCheckModels[idx], status: videoStatus }
+        }
+      }
+      notifyHealthListenersImmediate()
     }
+
+    // Final debounced batch to catch any stragglers
+    debouncedNotifyHealthListeners()
   }
 
   runChecks()
@@ -293,7 +352,6 @@ export function stopHealthChecks() {
     clearTimeout(healthNotifyTimeout)
     healthNotifyTimeout = null
   }
-  pendingHealthModels = null
 }
 
 export function subscribeHealth(callback: (models: PuterModel[]) => void) {

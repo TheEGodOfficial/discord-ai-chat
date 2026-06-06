@@ -385,7 +385,8 @@ export default function ChatInterface({ models }: ChatInterfaceProps) {
                               PreTag="div"
                               {...props}
                             >
-                              {String(children).replace(/\n$/, "")}
+                              {String(children).replace(/
+$/, "")}
                             </SyntaxHighlighter>
                           ) : (
                             <code className="bg-black/30 px-1.5 py-0.5 rounded text-sm text-blue-400" {...props}>
