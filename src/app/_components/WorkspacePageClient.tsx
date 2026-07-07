@@ -13,7 +13,7 @@ import {
   Loader2, Shield, Sparkles, ImageIcon, Video, MessageSquare, Cpu,
   Home, ChevronLeft, ChevronRight, Zap, Settings, Star, Crown
 } from "lucide-react"
-import { PuterModel, fetchModelsWithRetry, startHealthChecks, stopHealthChecks, subscribeHealth } from "@/lib/puter"
+import { PuterModel, fetchModelsWithRetry } from "@/lib/puter"
 
 type Tab = "home" | "chat" | "image" | "video" | "models" | "settings"
 
@@ -42,23 +42,13 @@ function WorkspaceContent() {
   }, [session, roleChecked])
 
   useEffect(() => {
-    let unsub: (() => void) | undefined
-
     async function loadModels() {
       const fetched = await fetchModelsWithRetry(8, 10000)
       setModels(fetched)
       setModelsLoading(false)
-      startHealthChecks(fetched, 30000)
-      unsub = subscribeHealth(updated => {
-        setModels(updated)
-      })
     }
 
     loadModels()
-    return () => {
-      stopHealthChecks()
-      if (unsub) unsub()
-    }
   }, [])
 
   const checkRole = async () => {
