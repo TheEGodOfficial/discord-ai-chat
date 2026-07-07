@@ -1,4 +1,4 @@
-import WorkspacePageClient from "../_components/WorkspacePageClient.tsx"
+import WorkspacePageClient from "../_components/WorkspacePageClient"
 
 export default function WorkspacePage() {
   return <WorkspacePageClient />
