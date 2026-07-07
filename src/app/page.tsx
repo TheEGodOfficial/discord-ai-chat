@@ -1,5 +1,5 @@
-import WorkspacePageClient from "../_components/WorkspacePageClient"
+import LandingPageClient from "./_components/LandingPageClient"
 
-export default function WorkspacePage() {
-  return <WorkspacePageClient />
+export default function Home() {
+  return <LandingPageClient />
 }
