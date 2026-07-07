@@ -14,10 +14,8 @@ interface ModelSelectorProps {
 export default function ModelSelector({ models, selected, onSelect, type, label }: ModelSelectorProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
-  const dropdownRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
-  const buttonRef = useRef<HTMLButtonElement>(null)
-  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 320 })
 
   const filtered = models.filter(m => {
     if (m.type !== type) return false
@@ -37,70 +35,23 @@ export default function ModelSelector({ models, selected, onSelect, type, label 
 
   const selectedModel = models.find(m => m.id === selected)
 
-  useEffect(() => {
-    if (open && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect()
-      const viewportHeight = window.innerHeight
-      const dropdownHeight = 400
-
-      let top = rect.bottom + 4
-      if (top + dropdownHeight > viewportHeight && rect.top - dropdownHeight > 0) {
-        top = rect.top - dropdownHeight - 4
-      }
-
-      setDropdownPos({
-        top,
-        left: rect.left,
-        width: Math.max(rect.width, 320)
-      })
-    }
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-
-    const handleScroll = () => {
-      if (buttonRef.current) {
-        const rect = buttonRef.current.getBoundingClientRect()
-        const viewportHeight = window.innerHeight
-        const dropdownHeight = 400
-
-        let top = rect.bottom + 4
-        if (top + dropdownHeight > viewportHeight && rect.top - dropdownHeight > 0) {
-          top = rect.top - dropdownHeight - 4
-        }
-
-        setDropdownPos({
-          top,
-          left: rect.left,
-          width: Math.max(rect.width, 320)
-        })
-      }
-    }
-
-    window.addEventListener("scroll", handleScroll, true)
-    window.addEventListener("resize", handleScroll)
-
-    return () => {
-      window.removeEventListener("scroll", handleScroll, true)
-      window.removeEventListener("resize", handleScroll)
-    }
-  }, [open])
-
+  // Close on click outside
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node) &&
-          buttonRef.current && !buttonRef.current.contains(e.target as Node)) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false)
       }
     }
-    document.addEventListener("mousedown", handleClick)
-    return () => document.removeEventListener("mousedown", handleClick)
-  }, [])
+    if (open) {
+      document.addEventListener("mousedown", handleClick)
+      return () => document.removeEventListener("mousedown", handleClick)
+    }
+  }, [open])
 
+  // Focus search when opened
   useEffect(() => {
     if (open && searchRef.current) {
-      searchRef.current.focus()
+      setTimeout(() => searchRef.current?.focus(), 10)
     }
   }, [open])
 
@@ -120,38 +71,32 @@ export default function ModelSelector({ models, selected, onSelect, type, label 
   }
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative" ref={containerRef}>
       {label && (
         <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
           {label}
         </label>
       )}
       <button
-        ref={buttonRef}
         onClick={() => setOpen(!open)}
         className={`flex items-center justify-between w-full px-4 py-2.5 bg-black/30 border rounded-lg text-sm text-white transition-all ${typeColors[type]}`}
         aria-expanded={open}
         aria-haspopup="listbox"
       >
-        <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${getStatusColor(selectedModel?.status)}`} aria-hidden="true" />
+        <div className="flex items-center gap-2 min-w-0">
+          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${getStatusColor(selectedModel?.status)}`} aria-hidden="true" />
           <span className="truncate">{selectedModel?.name || "Pick a model"}</span>
         </div>
-        <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
+        <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform flex-shrink-0 ml-2 ${open ? "rotate-180" : ""}`} aria-hidden="true" />
       </button>
 
       {open && (
         <div 
-          className="fixed z-[100] bg-discord-darker border border-white/10 rounded-xl shadow-2xl shadow-black/50 overflow-hidden"
-          style={{
-            top: dropdownPos.top,
-            left: dropdownPos.left,
-            width: dropdownPos.width,
-          }}
+          className="absolute z-50 left-0 right-0 mt-1 bg-discord-darker border border-white/10 rounded-xl shadow-2xl shadow-black/50 overflow-hidden max-h-[400px] flex flex-col"
           role="listbox"
           aria-label="Select AI model"
         >
-          <div className="p-2 border-b border-white/5">
+          <div className="p-2 border-b border-white/5 flex-shrink-0">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600" aria-hidden="true" />
               <input
@@ -165,7 +110,7 @@ export default function ModelSelector({ models, selected, onSelect, type, label 
               />
             </div>
           </div>
-          <div className="max-h-[400px] overflow-y-auto">
+          <div className="overflow-y-auto flex-1">
             {Object.entries(grouped).map(([provider, providerModels]) => (
               <div key={provider}>
                 <div className="sticky top-0 z-10 px-3 py-1.5 bg-discord-darkest/90 backdrop-blur text-xs font-bold text-purple-400 uppercase tracking-widest">
@@ -181,16 +126,16 @@ export default function ModelSelector({ models, selected, onSelect, type, label 
                     role="option"
                     aria-selected={selected === model.id}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
                       <span className={`w-2 h-2 rounded-full ${getStatusColor(model.status)} flex-shrink-0`} aria-hidden="true" />
-                      <div>
-                        <div className="text-sm text-white">{model.name}</div>
+                      <div className="min-w-0">
+                        <div className="text-sm text-white truncate">{model.name}</div>
                         {model.context && (
                           <div className="text-xs text-gray-600">{model.context.toLocaleString()} context</div>
                         )}
                       </div>
                     </div>
-                    {selected === model.id && <Check className="w-4 h-4 text-purple-400 flex-shrink-0" aria-hidden="true" />}
+                    {selected === model.id && <Check className="w-4 h-4 text-purple-400 flex-shrink-0 ml-2" aria-hidden="true" />}
                   </button>
                 ))}
               </div>
