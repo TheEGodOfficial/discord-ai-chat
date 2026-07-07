@@ -1,111 +1,209 @@
-"use client";
-
-import { useState, useRef, useEffect } from "react";
-import { ChevronDown, Check, Search } from "lucide-react";
-
-interface Model {
-  id: string;
-  name: string;
-  provider: string;
-}
+"use client"
+import { useState, useRef, useEffect } from "react"
+import { ChevronDown, Search, Check, AlertCircle } from "lucide-react"
+import { PuterModel } from "@/lib/puter"
 
 interface ModelSelectorProps {
-  models: Model[];
-  selected: string;
-  onSelect: (modelId: string) => void;
-  label?: string;
+  models: PuterModel[]
+  selected: string
+  onSelect: (id: string) => void
+  type: "chat" | "image" | "video"
+  label?: string
 }
 
-export default function ModelSelector({ models, selected, onSelect, label }: ModelSelectorProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const dropdownRef = useRef<HTMLDivElement>(null);
+export default function ModelSelector({ models, selected, onSelect, type, label }: ModelSelectorProps) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState("")
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 320 })
 
-  const selectedModel = models.find((m) => m.id === selected);
+  const filtered = models.filter(m => {
+    if (m.type !== type) return false
+    const q = search.toLowerCase()
+    return (
+      m.name.toLowerCase().includes(q) ||
+      m.id.toLowerCase().includes(q) ||
+      m.provider.toLowerCase().includes(q)
+    )
+  })
+
+  const grouped: Record<string, PuterModel[]> = {}
+  filtered.forEach(m => {
+    if (!grouped[m.provider]) grouped[m.provider] = []
+    grouped[m.provider].push(m)
+  })
+
+  const selectedModel = models.find(m => m.id === selected)
 
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
+    if (open && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      const viewportHeight = window.innerHeight
+      const dropdownHeight = 400
+
+      let top = rect.bottom + 4
+      if (top + dropdownHeight > viewportHeight && rect.top - dropdownHeight > 0) {
+        top = rect.top - dropdownHeight - 4
       }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
-  const filteredModels = models.filter(
-    (m) =>
-      m.name.toLowerCase().includes(search.toLowerCase()) ||
-      m.provider.toLowerCase().includes(search.toLowerCase()) ||
-      m.id.toLowerCase().includes(search.toLowerCase())
-  );
+      setDropdownPos({
+        top,
+        left: rect.left,
+        width: Math.max(rect.width, 320)
+      })
+    }
+  }, [open])
 
-  // Group by provider
-  const grouped = filteredModels.reduce((acc, model) => {
-    if (!acc[model.provider]) acc[model.provider] = [];
-    acc[model.provider].push(model);
-    return acc;
-  }, {} as Record<string, Model[]>);
+  useEffect(() => {
+    if (!open) return
+
+    const handleScroll = () => {
+      if (buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect()
+        const viewportHeight = window.innerHeight
+        const dropdownHeight = 400
+
+        let top = rect.bottom + 4
+        if (top + dropdownHeight > viewportHeight && rect.top - dropdownHeight > 0) {
+          top = rect.top - dropdownHeight - 4
+        }
+
+        setDropdownPos({
+          top,
+          left: rect.left,
+          width: Math.max(rect.width, 320)
+        })
+      }
+    }
+
+    window.addEventListener("scroll", handleScroll, true)
+    window.addEventListener("resize", handleScroll)
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll, true)
+      window.removeEventListener("resize", handleScroll)
+    }
+  }, [open])
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node) &&
+          buttonRef.current && !buttonRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [])
+
+  useEffect(() => {
+    if (open && searchRef.current) {
+      searchRef.current.focus()
+    }
+  }, [open])
+
+  function getStatusColor(status?: string) {
+    switch (status) {
+      case "online": return "bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.5)]"
+      case "offline": return "bg-red-500"
+      case "checking": return "bg-yellow-500 animate-pulse"
+      default: return "bg-gray-600"
+    }
+  }
+
+  const typeColors = {
+    chat: "border-purple-500/20 hover:border-purple-500/40",
+    image: "border-pink-500/20 hover:border-pink-500/40",
+    video: "border-blue-500/20 hover:border-blue-500/40",
+  }
 
   return (
     <div className="relative" ref={dropdownRef}>
+      {label && (
+        <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
+          {label}
+        </label>
+      )}
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-2 bg-discord-darker border border-gray-700/50 rounded-lg text-sm hover:border-gray-600 transition-all min-w-[200px]"
+        ref={buttonRef}
+        onClick={() => setOpen(!open)}
+        className={`flex items-center justify-between w-full px-4 py-2.5 bg-black/30 border rounded-lg text-sm text-white transition-all ${typeColors[type]}`}
+        aria-expanded={open}
+        aria-haspopup="listbox"
       >
-        <span className="flex-1 text-left truncate">
-          {selectedModel ? `${selectedModel.name}` : "Select model"}
-        </span>
-        <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+        <div className="flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full ${getStatusColor(selectedModel?.status)}`} aria-hidden="true" />
+          <span className="truncate">{selectedModel?.name || "Pick a model"}</span>
+        </div>
+        <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
       </button>
 
-      {isOpen && (
-        <div className="absolute bottom-full mb-2 right-0 w-80 bg-discord-darker border border-gray-700/50 rounded-xl shadow-2xl z-50 overflow-hidden">
-          <div className="p-2 border-b border-gray-700/50">
-            <div className="flex items-center gap-2 px-2 py-1.5 bg-discord-darkest rounded-lg">
-              <Search className="w-4 h-4 text-gray-500" />
+      {open && (
+        <div 
+          className="fixed z-[100] bg-discord-darker border border-white/10 rounded-xl shadow-2xl shadow-black/50 overflow-hidden"
+          style={{
+            top: dropdownPos.top,
+            left: dropdownPos.left,
+            width: dropdownPos.width,
+          }}
+          role="listbox"
+          aria-label="Select AI model"
+        >
+          <div className="p-2 border-b border-white/5">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600" aria-hidden="true" />
               <input
+                ref={searchRef}
                 type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search models..."
-                className="flex-1 bg-transparent outline-none text-sm text-white placeholder-gray-500"
-                autoFocus
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-purple-500/50"
+                aria-label="Search models"
               />
             </div>
           </div>
-          <div className="max-h-80 overflow-y-auto p-2 space-y-1">
+          <div className="max-h-[400px] overflow-y-auto">
             {Object.entries(grouped).map(([provider, providerModels]) => (
               <div key={provider}>
-                <div className="px-2 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <div className="sticky top-0 z-10 px-3 py-1.5 bg-discord-darkest/90 backdrop-blur text-xs font-bold text-purple-400 uppercase tracking-widest">
                   {provider}
                 </div>
-                {providerModels.map((model) => (
+                {providerModels.map(model => (
                   <button
                     key={model.id}
-                    onClick={() => {
-                      onSelect(model.id);
-                      setIsOpen(false);
-                      setSearch("");
-                    }}
-                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
-                      selected === model.id
-                        ? "bg-discord-blurple/20 text-discord-blurple"
-                        : "text-gray-300 hover:bg-gray-700/50"
+                    onClick={() => { onSelect(model.id); setOpen(false); setSearch("") }}
+                    className={`flex items-center justify-between w-full px-3 py-2.5 text-left hover:bg-white/5 transition-colors ${
+                      selected === model.id ? "bg-white/5" : ""
                     }`}
+                    role="option"
+                    aria-selected={selected === model.id}
                   >
-                    {selected === model.id && <Check className="w-4 h-4" />}
-                    <span className={selected === model.id ? "ml-0" : "ml-6"}>{model.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${getStatusColor(model.status)} flex-shrink-0`} aria-hidden="true" />
+                      <div>
+                        <div className="text-sm text-white">{model.name}</div>
+                        {model.context && (
+                          <div className="text-xs text-gray-600">{model.context.toLocaleString()} context</div>
+                        )}
+                      </div>
+                    </div>
+                    {selected === model.id && <Check className="w-4 h-4 text-purple-400 flex-shrink-0" aria-hidden="true" />}
                   </button>
                 ))}
               </div>
             ))}
-            {filteredModels.length === 0 && (
-              <div className="text-center py-4 text-gray-500 text-sm">No models found</div>
+            {filtered.length === 0 && (
+              <div className="px-3 py-4 text-sm text-gray-600 text-center">
+                <AlertCircle className="w-4 h-4 mx-auto mb-1" aria-hidden="true" />
+                {models.length === 0 ? "Loading models from Puter.js..." : "No models match your search"}
+              </div>
             )}
           </div>
         </div>
       )}
     </div>
-  );
+  )
 }

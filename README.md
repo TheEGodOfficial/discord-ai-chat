@@ -1,4 +1,4 @@
-# Discord AI Workspace
+# E Private AI
 
 A Next.js application with Discord OAuth authentication, role verification, and AI-powered chat, image generation, and video generation using Puter.js.
 
@@ -40,19 +40,13 @@ Enable Developer Mode in Discord (User Settings → Advanced → Developer Mode)
 
 ### 4. Environment Variables
 
-Create `.env.local`:
+Copy `.env.example` to `.env.local` and fill in your values:
 
-```env
-DISCORD_CLIENT_ID=your_client_id
-DISCORD_CLIENT_SECRET=your_client_secret
-DISCORD_BOT_TOKEN=your_bot_token
-DISCORD_GUILD_ID=your_server_id
-DISCORD_REQUIRED_ROLE_ID=your_role_id
-AUTH_SECRET=your_random_secret_at_least_32_chars
-NEXTAUTH_URL=http://localhost:3000
+```bash
+cp .env.example .env.local
 ```
 
-Generate AUTH_SECRET: `openssl rand -base64 32`
+Generate NEXTAUTH_SECRET: `openssl rand -base64 32`
 
 ### 5. Install & Run
 

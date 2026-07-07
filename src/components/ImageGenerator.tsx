@@ -1,178 +1,296 @@
-"use client";
+"use client"
+import { useState, useRef, useEffect } from "react"
+import { ImageIcon, Download, Trash2, Wand2, X, Edit2, Loader2, Sparkles } from "lucide-react"
+import ModelSelector from "./ModelSelector"
+import AITimer from "./AITimer"
+import { PuterModel, getDefaultModel } from "@/lib/puter"
+import { MediaItem, getImageHistory, addImageItem, deleteImageItem, renameImageItem } from "@/lib/media-history"
 
-import { useState } from "react";
-import { Image, Loader2, Download, Wand2, Sparkles } from "lucide-react";
-import ModelSelector from "./ModelSelector";
+interface ImageGeneratorProps {
+  models: PuterModel[]
+}
 
-const IMAGE_MODELS = [
-  { id: "gpt-image-2", name: "GPT Image 2", provider: "OpenAI" },
-  { id: "dall-e-3", name: "DALL-E 3", provider: "OpenAI" },
-  { id: "gemini-3.1-flash-image", name: "Gemini 3.1 Flash Image", provider: "Google" },
-  { id: "dreamshaper", name: "DreamShaper", provider: "Lykon" },
-  { id: "lucid-origin", name: "Lucid Origin", provider: "Leonardo.Ai" },
-  { id: "phoenix-1.0", name: "Phoenix 1.0", provider: "Leonardo.Ai" },
-  { id: "run-diffusion", name: "Run Diffusion", provider: "RunDiffusion" },
-];
+export default function ImageGenerator({ models }: ImageGeneratorProps) {
+  const [prompt, setPrompt] = useState("")
+  const [selectedModel, setSelectedModel] = useState("")
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [history, setHistory] = useState<MediaItem[]>([])
+  const [selectedImage, setSelectedImage] = useState<MediaItem | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editPrompt, setEditPrompt] = useState("")
+  const [retryCount, setRetryCount] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+  const progressRef = useRef<NodeJS.Timeout | null>(null)
 
-export default function ImageGenerator() {
-  const [prompt, setPrompt] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState("gpt-image-2");
-  const [error, setError] = useState("");
-  const [imageHistory, setImageHistory] = useState<{ url: string; prompt: string; model: string }[]>([]);
-
-  const generateImage = async () => {
-    if (!prompt.trim()) return;
-    setIsLoading(true);
-    setError("");
-    setGeneratedImage(null);
-
-    try {
-      const puter = (window as any).puter;
-      if (!puter) {
-        throw new Error("Puter.js not loaded");
-      }
-
-      const result = await puter.ai.txt2img(prompt, {
-        model: selectedModel,
-      });
-
-      // Result could be a URL string or an object with url property
-      const imageUrl = typeof result === "string" ? result : result?.url || result;
-
-      if (imageUrl) {
-        setGeneratedImage(imageUrl);
-        setImageHistory((prev) => [{ url: imageUrl, prompt, model: selectedModel }, ...prev]);
-      } else {
-        throw new Error("No image generated");
-      }
-    } catch (err: any) {
-      setError(err.message || "Failed to generate image");
-    } finally {
-      setIsLoading(false);
+  useEffect(() => {
+    setHistory(getImageHistory())
+    const imageModels = models.filter(m => m.type === "image")
+    if (imageModels.length > 0 && !selectedModel) {
+      const online = imageModels.find(m => m.status === "online")
+      setSelectedModel(online?.id || imageModels[0].id)
     }
-  };
+  }, [models])
 
-  const downloadImage = (url: string) => {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `generated-image-${Date.now()}.png`;
-    link.target = "_blank";
-    link.click();
-  };
+  useEffect(() => {
+    if (isGenerating) {
+      setProgress(0)
+      progressRef.current = setInterval(() => {
+        setProgress(prev => {
+          const remaining = 100 - prev
+          const increment = remaining * 0.05
+          const next = prev + increment + Math.random() * 2
+          return Math.min(next, 95)
+        })
+      }, 500)
+    } else {
+      if (progressRef.current) clearInterval(progressRef.current)
+      setProgress(0)
+    }
+    return () => {
+      if (progressRef.current) clearInterval(progressRef.current)
+    }
+  }, [isGenerating])
+
+  const handleGenerate = async () => {
+    if (!prompt.trim() || !selectedModel || isGenerating) return
+    setIsGenerating(true)
+    setRetryCount(0)
+    setError(null)
+
+    const puter = (window as any).puter
+    if (!puter?.ai?.txt2img) {
+      setError("Puter.js image generation is not available. Make sure you are on a supported domain.")
+      setIsGenerating(false)
+      return
+    }
+
+    let attempt = 0
+    const maxRetries = 8
+    let imageUrl = ""
+    let success = false
+
+    while (attempt < maxRetries) {
+      attempt++
+      setRetryCount(attempt)
+      try {
+        // Per developer.puter.com: txt2img(prompt, { model: "..." }) for real generation
+        // Returns HTMLImageElement with .src property
+        const result = await puter.ai.txt2img(prompt.trim(), { model: selectedModel })
+
+        // Extract URL from HTMLImageElement
+        if (result && typeof result.src === "string") {
+          imageUrl = result.src
+          success = true
+          break
+        } else if (result && typeof result === "string") {
+          imageUrl = result
+          success = true
+          break
+        }
+      } catch (err: any) {
+        console.warn("Image attempt " + attempt + "/" + maxRetries + " failed:", err)
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 10000))
+        }
+      }
+    }
+
+    if (success && imageUrl) {
+      const updated = addImageItem(prompt.trim(), imageUrl, selectedModel)
+      setHistory(updated)
+    } else {
+      setError("Failed to generate image after " + maxRetries + " attempts. The model may be unavailable.")
+    }
+
+    setIsGenerating(false)
+    setRetryCount(0)
+    setProgress(100)
+    setTimeout(() => setProgress(0), 500)
+  }
+
+  const handleDelete = (id: string) => {
+    const updated = deleteImageItem(id)
+    setHistory(updated)
+    if (selectedImage?.id === id) setSelectedImage(null)
+  }
+
+  const handleRename = (id: string) => {
+    if (editPrompt.trim()) {
+      const updated = renameImageItem(id, editPrompt.trim())
+      setHistory(updated)
+    }
+    setEditingId(null)
+    setEditPrompt("")
+  }
+
+  const handleDownload = (url: string, prompt: string) => {
+    const link = document.createElement("a")
+    link.href = url
+    link.download = "e-private-ai-" + prompt.slice(0, 30).replace(/\s+/g, "-") + ".png"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center">
-            <Image className="w-4 h-4 text-white" />
+    <div className="space-y-6">
+      <div className="glass-panel rounded-2xl p-6 border border-pink-500/10">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-gradient-to-br from-pink-600 to-purple-700 rounded-xl flex items-center justify-center shadow-lg shadow-pink-500/20">
+            <Sparkles className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h2 className="font-semibold text-white">Text to Image</h2>
-            <p className="text-xs text-gray-400">Generate stunning images from text descriptions</p>
+            <h2 className="text-lg font-bold text-white">Visual Synthesis</h2>
+            <p className="text-xs text-gray-500">Generate stunning images with AI</p>
           </div>
         </div>
-        <ModelSelector
-          models={IMAGE_MODELS}
-          selected={selectedModel}
-          onSelect={setSelectedModel}
-          label="Image Model"
-        />
-      </div>
 
-      {/* Input */}
-      <div className="glass-panel p-6">
         <div className="space-y-4">
           <div>
-            <label className="text-sm font-medium text-gray-300 mb-2 block">Prompt</label>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
+              Prompt
+            </label>
             <textarea
               value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe the image you want to generate... e.g., 'A futuristic cityscape at sunset with flying cars and neon lights'"
-              className="w-full bg-discord-darkest border border-gray-700/50 rounded-lg p-4 text-white placeholder-gray-500 outline-none focus:border-discord-blurple transition-all resize-none h-32"
+              onChange={e => setPrompt(e.target.value)}
+              placeholder="Describe the image you want to create. The more detail you give, the better the result."
+              rows={3}
+              className="input-dark resize-none"
             />
           </div>
+
+          <div className="w-64">
+            <ModelSelector
+              models={models}
+              selected={selectedModel}
+              onSelect={setSelectedModel}
+              type="image"
+              label="Model"
+            />
+          </div>
+
+          {error && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+              {error}
+            </div>
+          )}
+
+          {isGenerating && (
+            <div className="space-y-2">
+              <AITimer
+                isActive={isGenerating}
+                estimatedSeconds={30}
+                retryCount={retryCount > 0 ? retryCount : undefined}
+                maxRetries={retryCount > 0 ? 8 : undefined}
+              />
+              <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-pink-500 to-purple-500 transition-all duration-500"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="text-xs text-gray-600 text-center">
+                {progress < 30 ? "Getting everything ready..." : progress < 70 ? "Rendering your image..." : "Putting on the finishing touches..."}
+              </p>
+            </div>
+          )}
+
           <button
-            onClick={generateImage}
-            disabled={!prompt.trim() || isLoading}
-            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-all font-medium shadow-lg shadow-purple-500/20"
+            onClick={handleGenerate}
+            disabled={!prompt.trim() || isGenerating}
+            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 rounded-xl text-white font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-pink-500/20 hover:shadow-pink-500/40 hover:-translate-y-0.5"
           >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <Wand2 className="w-5 h-5" />
-                Generate Image
-              </>
-            )}
+            {isGenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Wand2 className="w-5 h-5" />}
+            {isGenerating ? "Synthesizing..." : "Generate Image"}
           </button>
         </div>
       </div>
 
-      {/* Error */}
-      {error && (
-        <div className="glass-panel p-4 border-red-500/30 bg-red-500/10">
-          <p className="text-red-400 text-sm">{error}</p>
-        </div>
-      )}
-
-      {/* Generated Image */}
-      {generatedImage && (
-        <div className="glass-panel p-6 animate-fade-in">
+      {selectedImage && (
+        <div className="glass-panel rounded-2xl p-6 border border-white/5 animate-fade-in">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-medium text-white flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-yellow-400" />
-              Generated Result
-            </h3>
-            <button
-              onClick={() => downloadImage(generatedImage)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-discord-darker hover:bg-gray-700 text-gray-300 rounded-lg text-sm transition-all"
-            >
-              <Download className="w-4 h-4" />
-              Download
-            </button>
+            <div className="flex items-center gap-2">
+              {editingId === selectedImage.id ? (
+                <input
+                  value={editPrompt}
+                  onChange={e => setEditPrompt(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleRename(selectedImage.id)}
+                  onBlur={() => handleRename(selectedImage.id)}
+                  autoFocus
+                  className="input-dark"
+                />
+              ) : (
+                <p className="text-sm text-gray-300">{selectedImage.prompt}</p>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { setEditingId(selectedImage.id); setEditPrompt(selectedImage.prompt) }}
+                className="p-2 hover:bg-white/5 rounded-lg text-gray-500 hover:text-white transition-colors"
+              >
+                <Edit2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => handleDownload(selectedImage.url!, selectedImage.prompt)}
+                className="p-2 hover:bg-white/5 rounded-lg text-gray-500 hover:text-blue-400 transition-colors"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => handleDelete(selectedImage.id)}
+                className="p-2 hover:bg-white/5 rounded-lg text-gray-500 hover:text-red-400 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setSelectedImage(null)}
+                className="p-2 hover:bg-white/5 rounded-lg text-gray-500 hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-          <div className="rounded-xl overflow-hidden bg-discord-darker">
-            <img
-              src={generatedImage}
-              alt="Generated"
-              className="w-full max-h-[600px] object-contain"
-            />
-          </div>
-          <p className="mt-3 text-sm text-gray-400 italic">"{prompt}"</p>
+          <img
+            src={selectedImage.url}
+            alt={selectedImage.prompt}
+            className="w-full max-h-[600px] object-contain rounded-xl border border-white/5"
+          />
         </div>
       )}
 
-      {/* History */}
-      {imageHistory.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="font-medium text-gray-300">History</h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {imageHistory.slice(1).map((item, idx) => (
+      {history.length > 0 && (
+        <div>
+          <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Your Creations</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {history.map(item => (
               <div
-                key={idx}
-                className="glass-panel p-2 cursor-pointer hover:border-discord-blurple/50 transition-all group"
-                onClick={() => setGeneratedImage(item.url)}
+                key={item.id}
+                onClick={() => setSelectedImage(item)}
+                className="group relative aspect-square rounded-xl overflow-hidden border border-white/5 cursor-pointer hover:border-pink-500/30 transition-all bg-discord-darker"
               >
-                <div className="aspect-square rounded-lg overflow-hidden bg-discord-darker mb-2">
-                  <img
-                    src={item.url}
-                    alt={item.prompt}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                  />
+                <img
+                  src={item.url}
+                  alt={item.prompt}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute bottom-0 left-0 right-0 p-3">
+                    <p className="text-xs text-white line-clamp-2">{item.prompt}</p>
+                    <p className="text-xs text-gray-500 mt-1">{item.model}</p>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-400 truncate">{item.prompt}</p>
-                <p className="text-xs text-gray-600">{item.model}</p>
+                <button
+                  onClick={e => { e.stopPropagation(); handleDelete(item.id) }}
+                  className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-red-500/60 rounded-lg text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
               </div>
             ))}
           </div>
         </div>
       )}
     </div>
-  );
+  )
 }
