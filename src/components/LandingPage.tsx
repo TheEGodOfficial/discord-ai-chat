@@ -5,7 +5,7 @@ import { useEffect, useState } from "react"
 import LoginButton from "@/components/LoginButton"
 import { Loader2, Shield, Sparkles, ImageIcon, Video, MessageSquare, Zap, ChevronRight } from "lucide-react"
 
-export default function Home() {
+export default function LandingPage() {
   const sessionResult = useSession()
   const session = sessionResult?.data
   const status = sessionResult?.status || "loading"

@@ -2,7 +2,6 @@
 
 import { useSession } from "next-auth/react"
 import { useEffect, useState, Suspense } from "react"
-import { useSearchParams } from "next/navigation"
 import LoginButton from "@/components/LoginButton"
 import ChatInterface from "@/components/ChatInterface"
 import ImageGenerator from "@/components/ImageGenerator"
@@ -28,14 +27,17 @@ function WorkspaceContent() {
   const [models, setModels] = useState<PuterModel[]>([])
   const [modelsLoading, setModelsLoading] = useState(true)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const searchParams = useSearchParams()
 
+  // Handle URL tab parameter without useSearchParams (avoids hydration issues)
   useEffect(() => {
-    const tab = searchParams.get("tab") as Tab
-    if (tab && ["home", "chat", "image", "video", "models", "settings"].includes(tab)) {
-      setActiveTab(tab)
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      const tab = params.get("tab") as Tab
+      if (tab && ["home", "chat", "image", "video", "models", "settings"].includes(tab)) {
+        setActiveTab(tab)
+      }
     }
-  }, [searchParams])
+  }, [])
 
   useEffect(() => {
     if (session?.user?.id && !roleChecked) {
@@ -49,7 +51,6 @@ function WorkspaceContent() {
       setModels(fetched)
       setModelsLoading(false)
     }
-
     loadModels()
   }, [])
 
@@ -417,7 +418,8 @@ function DashboardHome({ models, onNavigate }: { models: PuterModel[], onNavigat
 
 // Settings Tab
 function SettingsTab() {
-  const { data: session } = useSession()
+  const sessionResult = useSession()
+  const session = sessionResult?.data
   const [activeSettingsTab, setActiveSettingsTab] = useState("overview")
 
   return (

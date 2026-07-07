@@ -1,5 +1,5 @@
-import WorkspacePage from "@/components/WorkspacePage"
+import LandingPage from "@/components/LandingPage"
 
-export default function WorkspaceRoute() {
-  return <WorkspacePage />
+export default function Home() {
+  return <LandingPage />
 }
