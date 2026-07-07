@@ -21,7 +21,6 @@ function WorkspaceContent() {
   const sessionResult = useSession()
   const session = sessionResult?.data
   const status = sessionResult?.status || "loading"
-
   const [hasRole, setHasRole] = useState<boolean | null>(null)
   const [loading, setLoading] = useState(false)
   const [roleChecked, setRoleChecked] = useState(false)
@@ -273,6 +272,7 @@ function WorkspaceContent() {
 
   return null
 }
+
 // Dashboard Home Component
 function DashboardHome({ models, onNavigate }: { models: PuterModel[], onNavigate: (tab: Tab) => void }) {
   const chatModels = models.filter(m => m.type === "chat")
@@ -539,10 +539,6 @@ export default function WorkspacePage() {
         <Loader2 className="w-8 h-8 animate-spin text-neon-purple" />
       </div>
     }>
-      <WorkspaceContent />
-    </Suspense>
-  )
-}>
       <WorkspaceContent />
     </Suspense>
   )
