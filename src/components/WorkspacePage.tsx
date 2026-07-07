@@ -18,7 +18,10 @@ import { PuterModel, fetchModelsWithRetry } from "@/lib/puter"
 type Tab = "home" | "chat" | "image" | "video" | "models" | "settings"
 
 function WorkspaceContent() {
-  const { data: session, status } = useSession()
+  const sessionResult = useSession()
+  const session = sessionResult?.data
+  const status = sessionResult?.status || "loading"
+
   const [hasRole, setHasRole] = useState<boolean | null>(null)
   const [loading, setLoading] = useState(false)
   const [roleChecked, setRoleChecked] = useState(false)
@@ -270,7 +273,6 @@ function WorkspaceContent() {
 
   return null
 }
-
 // Dashboard Home Component
 function DashboardHome({ models, onNavigate }: { models: PuterModel[], onNavigate: (tab: Tab) => void }) {
   const chatModels = models.filter(m => m.type === "chat")
@@ -530,13 +532,17 @@ function SettingsTab() {
   )
 }
 
-export default function WorkspacePageClient() {
+export default function WorkspacePage() {
   return (
     <Suspense fallback={
       <div className="flex items-center justify-center min-h-screen bg-discord-darkest">
         <Loader2 className="w-8 h-8 animate-spin text-neon-purple" />
       </div>
     }>
+      <WorkspaceContent />
+    </Suspense>
+  )
+}>
       <WorkspaceContent />
     </Suspense>
   )

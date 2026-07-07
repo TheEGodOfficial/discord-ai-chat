@@ -1,5 +1,5 @@
-import WorkspacePageClient from "../_components/WorkspacePageClient"
+import WorkspacePage from "@/components/WorkspacePage"
 
-export default function WorkspacePage() {
-  return <WorkspacePageClient />
+export default function WorkspaceRoute() {
+  return <WorkspacePage />
 }
