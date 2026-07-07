@@ -26,12 +26,10 @@ function getPuter(): any {
   return (window as any).puter
 }
 
-// --- FULL MODEL LISTS - per provider, per agent type ---
+// --- FULL MODEL LISTS - all available models per provider ---
 // Based on official Puter.js docs (docs.puter.com, developer.puter.com)
-// and Anthropic docs (github.com/anthropics/skills)
-
-// CHAT MODELS - these come from puter.ai.listModels() but we also define
-// all available models since listModels() only returns chat models
+// Chat models come from puter.ai.listModels() dynamically
+// Image and video models are statically defined since listModels() only returns chat models
 
 // IMAGE MODELS - from developer.puter.com tutorials
 // txt2img(prompt, { model: "gpt-image-2" }) - returns HTMLImageElement
