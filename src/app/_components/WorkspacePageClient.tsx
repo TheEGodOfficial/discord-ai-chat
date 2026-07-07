@@ -256,7 +256,7 @@ function WorkspaceContent() {
                 )}
                 {activeTab === "models" && (
                   <ErrorBoundary>
-                    <ModelsTab models={models} onRefresh={(updatedModels) => startHealthChecks(updatedModels, 30000)} isChecking={models.some(m => m.status === "checking")} />
+                    <ModelsTab models={models} />
                   </ErrorBoundary>
                 )}
                 {activeTab === "settings" && <SettingsTab />}
